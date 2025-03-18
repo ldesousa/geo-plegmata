@@ -51,3 +51,4 @@ As with coverages, a Vector must identify in its meta-data the DGGRS and resolut
 Encoding/Abstraction
 --------------------
 
+These assets define behaviour allowing data structures to presist. The method signatures include the encoding and abstraction of meta-data and data segments. The meta-data must clearly identify the underlying DGGRS and if necessary data types. Data access is concieved in segmented form, considering the likely case of large datasets, either spaning large areas of the globe or expressed at a high spatial resolution.  
