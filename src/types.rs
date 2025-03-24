@@ -17,7 +17,7 @@
 // - remaning bits:
 //          each group of n_bh represent an index in the hierarchy
 
-pub enum VolumeId {
+pub enum CellId {
     U32(u32),
     U64(u64),
     U128(u128),
@@ -31,7 +31,7 @@ pub enum PlatonicSolid {
     Icosahedron = 4
 }
 
-impl VolumeId {
+impl CellId {
   pub fn new(aperture: u8,
              solid: PaltonicSolid,
              level: u8, // Up to 256 levels, u128 is the bottleneck
@@ -73,11 +73,11 @@ impl VolumeId {
 
     // Choose type based on bit size
     if n_bits <= 32 {
-      VolumeId::U32(bits as u32)
+      CellId::U32(bits as u32)
     } else if n_bits <= 64 {
-      VolumeId::U64(bits as u64)
+      CellId::U64(bits as u64)
     } else if n_bits <= 128 {
-      VolumeId::U128(bits)
+      CellId::U128(bits)
     } else {
       panic!("The level/resolution can not be stored in 128 bits")
     }
