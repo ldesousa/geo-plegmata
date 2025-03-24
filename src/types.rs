@@ -84,4 +84,46 @@ impl CellId {
   }
 }
     
-  
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElevationId {
+    I32(i32),
+    I64(i64),
+    I128(i128),
+}
+
+impl ElevationId {
+    pub fn new(elevation_level: i128) -> Self {
+        // choose the smallest signed type that fits
+        if elevation_level >= i32::MIN as i128 && elevation_level <= i32::MAX as i128 {
+            ElevationId::I32(elevation_level as i32)
+        } else if elevation_level >= i64::MIN as i128 && elevation_level <= i64::MAX as i128 {
+            ElevationId::I64(elevation_level as i64)
+        } else {
+            ElevationId::I128(elevation_level)
+        }
+    }
+
+    pub fn value(&self) -> i128 {
+        match self {
+            ElevationId::I32(v) => *v as i128,
+            ElevationId::I64(v) => *v as i128,
+            ElevationId::I128(v) => *v,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VolumeId {
+    pub cell: CellId,
+    pub elevation: ElevationId,
+}
+
+impl VolumeId {
+    pub fn new(cell: CellId, elevation_level: i128) -> Self {
+        let elevation = ElevationId::new(elevation_level);
+        VolumeId { cell, elevation }
+    }
+}
+
+
+
