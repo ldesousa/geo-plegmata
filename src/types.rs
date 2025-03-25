@@ -5,17 +5,17 @@
 // - bit 0: 
 //          if 0 each refinement_level can be represented in two bits (aperture/refinement ratio 3, 4),
 //          if 1 in three bits (aperture/refinement ratio 7). This number will be referred
-//          as n_bh in the following
+//          as n_bits_hierarchy_id in the following
 // - bits 1 to 3:
 //          define the starting Platonic solid
 // - bits 4 to (3+n_bits_hierarchy_id):
-//          where n_bits_hierarchy_id = log_2(floor((size-9)/n_bh))
+//          where n_bits_hierarchy_id = log_2(floor((size-9)/n_bits_hierarchy_id))
 //          define the refinement_level/resolution (note that this definition
 //          is conservative but with a LUT coulb be more efficent)
 // - bits (4+n_bits_hierarchy_id) to (8+n_bits_hierarchy_id):
 //          index in the Platonic solid faces
 // - remaning bits:
-//          each group of n_bh represent an index in the hierarchy
+//          each group of n_bits_hierarchy_id represent an index in the hierarchy
 
 pub enum CellId {
     U32(u32),
@@ -39,13 +39,13 @@ impl CellId {
              face_id: u8,
              hierarchy: &[u8]) -> Self {
 
-        let n_bh = match refinement_ratio {
+        let n_bits_hierarchy_id = match refinement_ratio {
             3 | 4 => 2,
             7 => 3,
             _ => panic!("Valid options for refinement_ratio are 3, 4 or 7"),
         };
-        let n_bits_hierarchy_id = (119 / n_bh as usize).ilog2();
-        let n_bits_total = 9 + n_bits_hierarchy_id + (hierarchy.len() * n_bh as usize);
+        let n_bits_hierarchy_id = (119 / n_bits_hierarchy_id as usize).ilog2();
+        let n_bits_total = 9 + n_bits_hierarchy_id + (hierarchy.len() * n_bits_hierarchy_id as usize);
     
         let mut bits: u128 = 0;
         let mut offset = 0;
@@ -70,7 +70,7 @@ impl CellId {
     
         // Remaining bits: hierarchal indices
         for (i, &ix) in hierarchy.iter().enumerate() {
-            bits |= (ix as u128) << (offset + i * n_bh as usize);
+            bits |= (ix as u128) << (offset + i * n_bits_hierarchy_id as usize);
         }
     
         // Choose type based on bit size
