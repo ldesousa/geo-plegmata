@@ -17,12 +17,12 @@ pub trait DGGRS {
     fn description(&self) -> String;
 
     /// The most essential function of a DGGRS, translates a pair of geographic
-    /// coordinaes into a cell identifier at a given grid resolution.
-    fn cell_id(&self, lat: i32, lon: i32, res: i16) -> CellId;
+    /// coordinaes into a cell identifier at a given grid refinement_levelolution.
+    fn cell_id(&self, lat: i32, lon: i32, refinement_level: i16) -> CellId;
     
-    /// Given a pair of geographic and a grid resolution, returns the
-    /// corresponding cell identifier in a human readable form.
-    fn cell_id_readable(&self, lat: i32, lon: i32, res: i16) -> String;
+    /// Given a pair of geographic and a grid refinement_levelolution, returns the
+    /// correfinement_levelponding cell identifier in a human readable form.
+    fn cell_id_readable(&self, lat: i32, lon: i32, refinement_level: i16) -> String;
 
     /// Given a cell identifier, returns the geographic coordinates of its
     /// centroid.
@@ -30,9 +30,9 @@ pub trait DGGRS {
 
     /// The 3D counter part of cell_id. Takes as arguments geographic
     /// coordinates plus an altitude, returning the identifier of the
-    /// corresponding volume. A 64 bit positive integer might not provide enough
+    /// correfinement_levelponding volume. A 64 bit positive integer might not provide enough
     /// precision, a different formulation is left for a later version.
-    fn volume_id(&self, lat: i32, lon: i32, alt: i32, res: i16) -> VolumeId;
+    fn volume_id(&self, lat: i32, lon: i32, alt: i32, refinement_level: i16) -> VolumeId;
 }
 
 
