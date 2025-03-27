@@ -1,0 +1,13 @@
+[package]
+name = "geo_plegmata"
+version = "0.1.0"
+license = "MIT"
+edition = "2024"
+
+[dependencies]
+
+[dev-dependencies]
+
+[lib]
+name = "geo_plegmata"
+path = "src/lib.rs"
