@@ -1,3 +1,4 @@
+```mermaid
 classDiagram
 
 class DGGRS
@@ -34,3 +35,4 @@ class CoverageAbstraction
 
 class VectorAbstraction
 <<interface>> VectorAbstraction
+```
