@@ -5,6 +5,7 @@ license = "MIT"
 edition = "2024"
 
 [dependencies]
+proj = "0.29"
 
 [dev-dependencies]
 
