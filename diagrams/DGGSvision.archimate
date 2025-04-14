@@ -1,3 +1,12 @@
+<!--
+// Copyright 2025 contributors to the GeoPlegmata project. 
+//
+// Licenced under the Apache Licence, Version 2.0 <LICENCE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENCE-MIT or http://opensource.org/licenses/MIT>, at your
+// discretion. This file may not be copied, modified, or distributed
+// except according to those terms.
+-->
 <?xml version="1.0" encoding="UTF-8"?>
 <archimate:model xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:archimate="http://www.archimatetool.com/archimate" name="DGGS" id="id-4c2891f765784b19bd1492f31b3c4e3d" version="5.0.0">
   <folder name="Strategy" id="id-ddcecc0834394ac1af57ad4b81ba3b8f" type="strategy"/>
