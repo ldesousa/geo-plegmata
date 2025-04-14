@@ -1,3 +1,12 @@
+// Copyright 2025 contributors to the GeoPlegmata project. 
+//
+// Licenced under the Apache Licence, Version 2.0 <LICENCE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENCE-MIT or http://opensource.org/licenses/MIT>, at your
+// discretion. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+
 // This is similar to the H3 Index Bit Layout but the size varais depending on the resolution
 // I do not know much about DGGS so for sure I am forgetting something fundamental but this is the idea
 // Also need to reason about memory aligment in case of vector of different sizes
