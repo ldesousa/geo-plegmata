@@ -1,3 +1,3 @@
 mod constants;
 mod pscp;
-mod vgcp;
+pub mod vgcp;

@@ -1,2 +1,2 @@
-mod ico_vgcp;
+pub mod ico_vgcp;
 mod vgcp;
