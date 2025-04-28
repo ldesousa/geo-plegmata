@@ -7,10 +7,17 @@ use crate::{
 
 // use super::vgcp::Vgcp;
 
-// Implementation for Icosahedron Vertex Great Circle Projection.
-pub struct Ivgcp;
+/// Implementation for Icosahedron Vertex Great Circle Projection.
+/// vgcp - Vertex Great Circle Projection.
+/// Based on the slice and dice approach from this article:
+/// http://dx.doi.org/10.1559/152304006779500687
+pub struct Vgcp;
 
-impl Projection for Ivgcp {
+- conseguir os vertices dos triangulos, achar a configuração do Icosahedron
+- Achar onde os pontos se encontram no triangulo
+https://chatgpt.com/c/68091cde-4428-8002-beb3-6713a35494ec
+
+impl Projection for Vgcp {
     fn forward(&self, positions: Vec<Position>, shape: &dyn Polyhedron) -> [f64; 2] {
         let ArcLengths {
             ab,
@@ -47,9 +54,11 @@ impl Projection for Ivgcp {
 
         let xy = f64::sqrt((1.0 - cos(ap)) / (1.0 - cosXpY));
 
+        // entre o A e o C que dá o ponto D
         let pdi_x = v2d.c[0] + (v2d.a[0] - v2d.c[0]) * uv;
         let pdi_y = v2d.c[1] + (v2d.a[1] - v2d.c[1]) * uv;
 
+        // entre o D e o B que dá o ponto P
         let pdi_x = pdi_x + (pdi_x - v2d.b[0]) * xy;
         let pdi_y = pdi_y + (pdi_y - v2d.b[1]) * xy;
 
