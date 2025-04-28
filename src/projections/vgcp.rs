@@ -13,9 +13,8 @@ use crate::{
 /// http://dx.doi.org/10.1559/152304006779500687
 pub struct Vgcp;
 
-- conseguir os vertices dos triangulos, achar a configuração do Icosahedron
-- Achar onde os pontos se encontram no triangulo
-https://chatgpt.com/c/68091cde-4428-8002-beb3-6713a35494ec
+// - conseguir os vertices dos triangulos, achar a configuração do Icosahedron
+// - Achar onde os pontos se encontram no triangulo
 
 impl Projection for Vgcp {
     fn forward(&self, positions: Vec<Position>, shape: &dyn Polyhedron) -> [f64; 2] {
