@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 
 use crate::utils::math::to_rad;
 
-use super::constants::{AUTHALIC_EARTH_RADIUS, RR, SPHERICAL_DISTANCE, THETA};
+// use super::constants::{AUTHALIC_EARTH_RADIUS, RR, SPHERICAL_DISTANCE, THETA};
 
 /// pscp - Parallel Small Circle Projection.
 /// Based on the slice and dice approach from this article:

@@ -1,8 +1,8 @@
-use crate::models::common::Position;
+use crate::models::common::{Position2D, PositionGeo};
 
 use super::polyhedron::Polyhedron;
 
 pub trait Projection {
-    fn forward(&self, positions: Vec<Position>, shape: &dyn Polyhedron) -> [f64; 2];
+    fn forward(&self, positions: Vec<PositionGeo>, shape: &dyn Polyhedron) -> Vec<Position2D>;
     fn inverse(&self) -> String;
 }

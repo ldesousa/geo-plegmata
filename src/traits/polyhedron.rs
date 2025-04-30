@@ -1,11 +1,13 @@
+use crate::models::common::PositionGeo;
+
 pub trait Polyhedron {
     // fn new(self) ;
     // fn golden_ratio(&self) -> f64;
     // fn spherical_distance(&self) -> f64;
     // fn plane_angle(&self) -> f64;
-    fn planar_vertexes(&self) -> Vertexes;
-    fn unit_vectors(&self) -> UnitVectors;
-    fn triangle_arc_lengths(&self) -> ArcLengths;
+    fn get_planar_vertexes(&self) -> Vertexes;
+    fn get_triangle_unit_vectors(&self) -> UnitVectors;
+    fn get_triangle_arc_lengths(&self, p: PositionGeo) -> ArcLengths;
 }
 
 #[derive(Default, Debug)]

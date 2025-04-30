@@ -1,3 +1,5 @@
+use crate::models::common::PositionGeo;
+use crate::utils::math::{cos, sin, to_deg, to_rad};
 use crate::{traits::polyhedron::Polyhedron, utils::math::pow};
 
 use crate::traits::polyhedron::{ArcLengths, UnitVectors, Vertexes};
@@ -40,14 +42,14 @@ impl Polyhedron for Icosahedron {
     //     ico.planar_vertexes();
     //     ico;
     // }
-    fn planar_vertexes(&self) -> Vertexes {
+    fn get_planar_vertexes(&self) -> Vertexes {
         let a = [0.0, 0.0];
         let b = [0.8944, 0.0];
         let c = [0.2764, -0.8507];
 
         Vertexes { a, b, c }
     }
-    fn unit_vectors(&self) -> UnitVectors {
+    fn get_triangle_unit_vectors(&self) -> UnitVectors {
         let aux = 1.0 / f64::sqrt(1.0 + pow(self::GOLDEN_RATIO, 2));
         let aux1 = self::GOLDEN_RATIO / f64::sqrt(1.0 + pow(self::GOLDEN_RATIO, 2));
 
@@ -59,22 +61,25 @@ impl Polyhedron for Icosahedron {
     }
 
     // to 90 degrees right triangle
-    fn triangle_arc_lengths(&self) -> ArcLengths {
-        let uvs = self.unit_vectors();
+    fn get_triangle_arc_lengths(&self, p: PositionGeo) -> ArcLengths {
+        let uvs = self.get_triangle_unit_vectors();
         let dot_ab = 0.0;
         let ab = f64::acos(dot_ab);
         let bc = f64::acos(uvs.b[0] * uvs.c[0] + uvs.b[1] * uvs.c[1] + uvs.b[2] * uvs.c[2]);
         let ac = f64::acos(uvs.a[0] * uvs.c[0] + uvs.a[1] * uvs.c[1] + uvs.a[2] * uvs.c[2]);
 
-        let uvp0 = uvs.a[0] + uvs.b[0] + uvs.c[0];
-        let uvp1 = uvs.a[1] + uvs.b[1] + uvs.c[1];
-        let uvp2 = uvs.a[2] + uvs.b[2] + uvs.c[2];
-        let norm_uvp = f64::sqrt(pow(uvp0, 2) + pow(uvp1, 2) + pow(uvp2, 2));
-        let uvp = vec![uvp0 / norm_uvp, uvp1 / norm_uvp, uvp2 / norm_uvp];
-        let ap = self::SPHERICAL_DISTANCE; //f64::acos(uvs.a[0] * uvp[0] + uvs.a[1] * uvp[1] + uvs.a[2] * uvp[2]);
-        let bp = f64::acos(uvs.b[0] * uvp[0] + uvs.b[1] * uvp[1] + uvs.b[2] * uvp[2]);
-        let cp = f64::acos(uvs.c[0] * uvp[0] + uvs.c[1] * uvp[1] + uvs.c[2] * uvp[2]);
+        let lat = to_rad(p.lat);
+        let lon = to_rad(p.lon);
+        // calculate unit vectors for point P
+        let uv_px = cos(lat) * cos(lon);
+        let uv_py = cos(lat) * sin(lon);
+        let uv_pz = sin(lat);
 
+        let ap = f64::acos(uvs.a[0] * uv_px + uvs.a[1] * uv_py + uvs.a[2] * uv_pz); //f64::acos(uvs.a[0] * uvp[0] + uvs.a[1] * uvp[1] + uvs.a[2] * uvp[2]);
+        let bp = f64::acos(uvs.b[0] * uv_px + uvs.b[1] * uv_py + uvs.b[2] * uv_pz);
+        let cp = f64::acos(uvs.c[0] * uv_px + uvs.c[1] * uv_py + uvs.c[2] * uv_pz);
+
+        println!("{:?}", [ab, bc, ac, ap, bp, cp]);
         ArcLengths {
             ab,
             bc,

@@ -1,12 +1,12 @@
 use geo_plegmata::{
-    models::common::Position, projections::vgcp::Vgcp, shape::icosahedron::Icosahedron,
+    models::common::PositionGeo, projections::vgcp::Vgcp, shape::icosahedron::Icosahedron,
     traits::projection::Projection,
 };
 
 fn main() {
-    let position = Position {
-        lat: 10.0,
-        lon: 0.1,
+    let position = PositionGeo {
+        lat: 38.695125,
+        lon: -9.222154
     };
     let projection = Vgcp;
 
