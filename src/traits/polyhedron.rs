@@ -5,9 +5,10 @@ pub trait Polyhedron {
     // fn golden_ratio(&self) -> f64;
     // fn spherical_distance(&self) -> f64;
     // fn plane_angle(&self) -> f64;
-    fn get_planar_vertexes(&self) -> Vertexes;
+    fn get_faces(&self) -> u8;
+    fn get_planar_vertexes(&self) -> Vec<[(u8, u8); 3]>;
     fn get_triangle_unit_vectors(&self) -> UnitVectors;
-    fn get_triangle_arc_lengths(&self, p: PositionGeo) -> ArcLengths;
+    fn get_triangle_arc_lengths(&self, p: &PositionGeo) -> ArcLengths;
 }
 
 #[derive(Default, Debug)]
