@@ -1,54 +1,81 @@
-GeoPlegmata
-===========
+# DGGRS Library
+This library provides an interface to DGGRID (and potentinally other tools) to genereate cells. The output of the three public functions is a `CellsGEO` struct with the cell ID and an vector of coordinates that describes the cell polygon using the [geo](https://github.com/georust/geo) primitive [Polygon](https://docs.rs/geo/latest/geo/geometry/struct.Polygon.html).
 
-This project aims to be an harbour for individuals, companies and other projects developing software implementing or using Discrete Global Grid Systems (DGGS). It is meant as an accreation point, around which collaboration synergies can accelerate the development of modern Geographic Information Systems (GIS), multiplying benefits to those contributing.
+## Requirments
 
-Ambitious? Certainly. Necessary? Absolutely. DGGS software has existed for more than twenty years, but is yet to have the impact on GIS (and GeoSciences at large) it should have. Dispersion of effort and objectives has been a major element in this delay.
+Make sure DGGRID is compiled and available on your system. Remember the path where the `dggrid` executable is, or add `dggrid` to your `$PATH`.
 
-The abstractions proposed by GeoPlegmata are meant to not only accelerate development, but also facilitate the development of tools and interfaces to end users. Whereas so far the multitude of different DGGS and accompanying software have been a hurdle to anyone whishing to adopt them, GeoPlegmata intendens to create a common source code lexicon. Independently of the kind of DGGS the user wishes to use, or for what purpose, tools such as a Python API or a web-based display should present the same ease of access and use.
+## Usage Example
 
-### The name
+Create a new crate with `cargo new` and add this dependency in your `cargo.toml`. I expect to publish this to crates.io in the future, which will simplify this with `cargo add dggrs`.
+````
+[dependencies]
+dggrs = {version = "0.1.0", git = git@gitlab.com/geoinsight/dggrs.git}
+````
 
-The term *geo* is Greek for Earth. Since DGGSs are primarilly concieved as grids on the Earth's surface, it seems appropriate to use the Greek term for grids, *plegmata*, to compose the name. *Plegmata* is plural for *plegma*, a grid. 
+In your `main.rs` add the following code. In this example the DGGRID generator service is instantiated using the path to the DGGRID executable `dggrid` and a path to the work directory `/dev/shm`. 
 
-The Pillars
-===========
+````
+use dggrs;
+use dggrs::models::dggrid::CellID;
+use geo::geometry::Point;
 
-GeoPlegmata starts by offering a collection of interfaces specifying the behaviour of programmes and code libraries wishing to "join in" the effort. They can be seen as an abstract layer setting a **contract** between different programmes. These interfaces are largely conformant to the [OGC API for DGGS](https://ogcapi.ogc.org/dggs/).
+fn main() {
+    let generator = dggrs::DggridService::default();
 
-At present three pillars are part of the core design: (i) Discrete Global Grid Reference Systems (DGGRS), (ii) Data Structures and (iii) Encoding/Abstraction. The aim is for any programme implementing one of these pillars to benefit seamlessly from any functionality offered by any programme implementing one of the others.
+    let configs = vec![
+        (
+            "ISEA3H",
+            CellID::new("x000000000000000").expect("invalid ISEA3H ID"),
+        ),
+        (
+            "IGEO7",
+            CellID::new("099fffffffffffff").expect("invalid IGEO7 ID"),
+        ),
+    ];
 
-DGGRS
------
+    let bbox: Option<Vec<Vec<f64>>> = Some(vec![
+        vec![-77.0, 39.0], // lower left
+        vec![-76.0, 40.0], // upper right
+    ]);
 
-A library or programme implementing a Discrete Global Grid Reference System offers the basic funcionalities to locate any position on the Earth's surface with a global grid. It translates latitude and longitude coordinates into grid cell identifiers and grid cell topologies. 
+    let pnt = Point::new(10.9, 4.9);
+    for (dggs, cell_id) in configs {
+        println!("=== DGGS Type: {} ===", dggs);
 
-Kevin Sahr first observed the capacity of a DGGS as a geo-spatial reference system in the work titled "[Location coding on icosahedral aperture 3 hexagon discrete global grids](https://doi.org/10.1016/j.compenvurbsys.2007.11.005)". By complementing the topology of a DGGS with a function mapping cells to unique identifiers, a DGGS is able to locate any location on the Earth's surface, at any desired spatial resolution.
+        println!("Global");
+        let result = generator.whole_earth(dggs.to_string(), 2, false, None);
+        println!(
+            "{:?} \nGenerated {} cells",
+            result.cells,
+            result.cells.len()
+        );
 
-The DGGRS interface is meant as the connection point to existing libraries, in particular DGGRID, but also H3, S2 and more.
+        println!("Global with Bbox");
+        let result = generator.whole_earth(dggs.to_string(), 2, false, bbox.clone());
+        println!(
+            "{:?} \nGenerated {} cells",
+            result.cells,
+            result.cells.len()
+        );
 
-Data Strucutres
----------------
+        println!("Point");
+        let result = generator.from_point(dggs.to_string(), 6, pnt, false);
+        println!(
+            "{:?} \nGenerated {} cells",
+            result.cells,
+            result.cells.len()
+        );
 
-Data structures based on a DGGS bring GeoPlegmata closer to what users may expect from a GIS.
+        println!("Subzones of {}", cell_id);
+        let result = generator.coarse_cells(dggs.to_string(), 6, cell_id, 3, false);
+        println!(
+            "{:?} \nGenerated {} cells",
+            result.cells,
+            result.cells.len()
+        );
+    }
+}
+````
 
-### Coverage
-
-In simple terms, a converage is a function mapping geo-spatial coordinates into values, usually representing some phenomenon continuous in space. With DGGS a coverage becomes a function mapping grid cell identifiers into values. 
-
-A Coverage may encompass the complete surface of the Earth, or just a segment thereof. The spatial extent of the coverage is one of the elements of its meta-data, along with the identification of the underlying DGGRS.
-
-Coverages are often organised into blocks, sub-segments of its extent that facilitate their management in memory and encoding. The OGC DGGS API defines the concept of *Zone*, that largely overlaps with that of block.
-
-In its meta-data the Coverage must identify the DGGRS resolution of its cells, as well as the resolution of is blocks (or zones).
-
-### Vector
-
-The Vector concept with DGGS is also similar to that in traditional GIS, a collection of geometries to which a set of key-value pairs is associated. The only difference being with the nodes of the geometries, determined by DGGRS cell identifiers.
-
-As with coverages, a Vector must identify in its meta-data the DGGRS and resolution determining its cell identifers.
-
-Encoding/Abstraction
---------------------
-
-These assets define behaviour allowing data structures to presist. The method signatures include the encoding and abstraction of meta-data and data segments. The meta-data must clearly identify the underlying DGGRS and if necessary data types. Data access is concieved in segmented form, considering the likely case of large datasets, either spaning large areas of the globe or expressed at a high spatial resolution.  
+Instead of printing out the length of `grid.cells.len()` you can also print out the struct itself.

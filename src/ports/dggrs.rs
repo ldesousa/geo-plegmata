@@ -1,0 +1,28 @@
+use crate::models::common::CellsGEO;
+use geo::Point;
+// That is the port
+pub trait DggrsPort: Send + Sync {
+    fn whole_earth(
+        &self,
+        dggs_type: String,
+        dggs_res_spec: u8,
+        densify: bool,
+        bbox: Option<Vec<Vec<f64>>>,
+    ) -> CellsGEO;
+    fn from_point(
+        &self,
+        dggs_type: String,
+        dggs_res_spec: u8,
+        point: Point,
+        densify: bool,
+    ) -> CellsGEO;
+    fn coarse_cells(
+        &self,
+        dggs_type: String,
+        dggs_res_spec: u8,
+        clip_cell_addresses: String,
+        // clip_cell_res: u8,
+        densify: bool,
+    ) -> CellsGEO;
+    fn single_zone(&self, dggs_type: String, zone_id: String, densify: bool) -> CellsGEO;
+}
