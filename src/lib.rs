@@ -1,7 +1,9 @@
 #![doc = include_str!("../README.md")]
-
-mod adapters;
-mod ports;
-
+pub mod adapters;
+pub mod dggrs;
+pub mod factory;
 pub mod models;
-pub use adapters::dggrid_service::DggridService;
+pub mod ports;
+
+/// This is the only re-export that is needed.
+pub use factory::dggrs_factory::get;

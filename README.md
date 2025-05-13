@@ -17,20 +17,18 @@ In your `main.rs` add the following code. In this example the DGGRID generator s
 
 ````
 use dggrs;
-use dggrs::models::dggrid::CellID;
 use geo::geometry::Point;
-
 fn main() {
-    let generator = dggrs::DggridService::default();
-
     let configs = vec![
         (
-            "ISEA3H",
-            CellID::new("x000000000000000").expect("invalid ISEA3H ID"),
+            String::from("DGGRID"),
+            String::from("ISEA3H"),
+            String::from("03a000000000000000"),
         ),
         (
-            "IGEO7",
-            CellID::new("099fffffffffffff").expect("invalid IGEO7 ID"),
+            String::from("DGGRID"),
+            String::from("IGEO7"),
+            String::from("054710bfffffffffff"),
         ),
     ];
 
@@ -40,11 +38,13 @@ fn main() {
     ]);
 
     let pnt = Point::new(10.9, 4.9);
-    for (dggs, cell_id) in configs {
+    for (tool, dggs, cell_id) in configs {
         println!("=== DGGS Type: {} ===", dggs);
 
+        let generator = dggrs::get(&tool, &dggs);
+
         println!("Global");
-        let result = generator.whole_earth(dggs.to_string(), 2, false, None);
+        let result = generator.whole_earth(2, false, None);
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,
@@ -52,7 +52,7 @@ fn main() {
         );
 
         println!("Global with Bbox");
-        let result = generator.whole_earth(dggs.to_string(), 2, false, bbox.clone());
+        let result = generator.whole_earth(2, false, bbox.clone());
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,
@@ -60,7 +60,7 @@ fn main() {
         );
 
         println!("Point");
-        let result = generator.from_point(dggs.to_string(), 6, pnt, false);
+        let result = generator.from_point(6, pnt, false);
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,
@@ -68,7 +68,15 @@ fn main() {
         );
 
         println!("Subzones of {}", cell_id);
-        let result = generator.coarse_cells(dggs.to_string(), 6, cell_id, 3, false);
+        let result = generator.coarse_cells(6, cell_id.clone(), false);
+        println!(
+            "{:?} \nGenerated {} cells",
+            result.cells,
+            result.cells.len()
+        );
+
+        println!("Single Zone {}", cell_id.clone());
+        let result = generator.single_zone(cell_id.clone(), false);
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,
