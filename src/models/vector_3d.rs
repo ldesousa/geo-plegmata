@@ -6,6 +6,22 @@ pub struct Vector3D {
 }
 
 impl Vector3D {
+    pub fn normalize(self) -> Self {
+        let mag = (self.x * self.x + self.y * self.y + self.z * self.z).sqrt();
+        Self {
+            x: self.x / mag,
+            y: self.y / mag,
+            z: self.z / mag,
+        }
+    }
+
+    pub fn mid(a: Self, b: Self) -> Self {
+        Self {
+            x: (a.x + b.x) / 2.0,
+            y: (a.y + b.y) / 2.0,
+            z: (a.z + b.z) / 2.0,
+        }
+    }
     pub fn dot(self, other: Self) -> f64 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }

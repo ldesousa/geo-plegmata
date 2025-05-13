@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 use std::usize;
 
-use crate::models::common::PositionGeo;
+use crate::models::common::{Position2D, PositionGeo};
 use crate::models::quaternion::Quaternion;
 use crate::models::vector_3d::Vector3D;
 use crate::utils::math::{cos, sin, to_deg, to_rad};
@@ -26,6 +26,9 @@ impl Polyhedron for Rhombic5x6 {
     }
     fn get_planar_vertexes(&self) -> Vec<[(u8, u8); 3]> {
         TRIANGLES.to_vec()
+    }
+    fn get_indices(&self) -> Vec<[u8; 3]> {
+        INDICES.to_vec()
     }
     fn get_triangle_unit_vectors(&self) -> UnitVectors {
         let aux = 1.0 / f64::sqrt(1.0 + pow(self::GOLDEN_RATIO, 2));
@@ -98,24 +101,33 @@ impl Polyhedron for Rhombic5x6 {
     }
 
     // to 90 degrees right triangle
-    fn get_triangle_arc_lengths(&self, vector: [f64; 3]) -> ArcLengths {
-        let uvs = self.get_triangle_unit_vectors();
-        let dot_ab = 0.0;
-        let ab = f64::acos(dot_ab);
-        let bc = f64::acos(uvs.b[0] * uvs.c[0] + uvs.b[1] * uvs.c[1] + uvs.b[2] * uvs.c[2]);
-        let ac = f64::acos(uvs.a[0] * uvs.c[0] + uvs.a[1] * uvs.c[1] + uvs.a[2] * uvs.c[2]);
+    fn get_triangle_arc_lengths(
+        &self,
+        vector: [f64; 3],
+        face_vectors: Vec<Vector3D>,
+        face_vertices: [(u8, u8); 3],
+    ) -> ArcLengths {
+        // let uvs = self.get_triangle_unit_vectors();
+        // let dot_ab = 0.0;
+        // let ab = f64::acos(dot_ab);
+        // let bc = f64::acos(uvs.b[0] * uvs.c[0] + uvs.b[1] * uvs.c[1] + uvs.b[2] * uvs.c[2]);
+        // let ac = f64::acos(uvs.a[0] * uvs.c[0] + uvs.a[1] * uvs.c[1] + uvs.a[2] * uvs.c[2]);
 
-        let lat = to_rad(0.0);
-        let lon = to_rad(0.0);
-        // calculate 3d unit vectors for point P
-        let uv_px = cos(lat) * cos(lon);
-        let uv_py = cos(lat) * sin(lon);
-        let uv_pz = sin(lat);
+        // let lat = to_rad(0.0);
+        // let lon = to_rad(0.0);
+        // // calculate 3d unit vectors for point P
+        // let uv_px = cos(lat) * cos(lon);
+        // let uv_py = cos(lat) * sin(lon);
+        // let uv_pz = sin(lat);
+        // let ap = f64::acos(uvs.a[0] * uv_px + uvs.a[1] * uv_py + uvs.a[2] * uv_pz); //f64::acos(uvs.a[0] * uvp[0] + uvs.a[1] * uvp[1] + uvs.a[2] * uvp[2]);
+        // let bp = f64::acos(uvs.b[0] * uv_px + uvs.b[1] * uv_py + uvs.b[2] * uv_pz);
+        // let cp = f64::acos(uvs.c[0] * uv_px + uvs.c[1] * uv_py + uvs.c[2] * uv_pz);
+        let point_center = self.get_face_center_2d(face_vertices);
+        let vector_center =
+            self.get_face_center_3d(face_vectors[0], face_vectors[1], face_vectors[2]);
 
-        let ap = f64::acos(uvs.a[0] * uv_px + uvs.a[1] * uv_py + uvs.a[2] * uv_pz); //f64::acos(uvs.a[0] * uvp[0] + uvs.a[1] * uvp[1] + uvs.a[2] * uvp[2]);
-        let bp = f64::acos(uvs.b[0] * uv_px + uvs.b[1] * uv_py + uvs.b[2] * uv_pz);
-        let cp = f64::acos(uvs.c[0] * uv_px + uvs.c[1] * uv_py + uvs.c[2] * uv_pz);
-
+        let p_mid = Position2D::mid(face_vertices[1], face_vertices[2]);
+        let v_mid = Vector3D::mid(face_vectors[1],face_vectors[2]);
         ArcLengths {
             ab,
             bc,
@@ -125,8 +137,27 @@ impl Polyhedron for Rhombic5x6 {
             cp,
         }
     }
+    fn get_face_center_2d(&self, p: [(u8, u8); 3]) -> Position2D {
+        Position2D {
+            x: (p[0].0 + p[1].0 + p[2].0) / 3,
+            y: (p[0].1 + p[1].1 + p[2].1) / 3,
+        }
+    }
+    fn get_face_center_3d(
+        &self,
+        vector1: [f64; 3],
+        vector2: [f64; 3],
+        vector3: [f64; 3],
+    ) -> Vector3D {
+        Vector3D {
+            x: (vector1[0] + vector2[0] + vector3[0]) / 3.0,
+            y: (vector1[1] + vector2[1] + vector3[1]) / 3.0,
+            z: (vector1[2] + vector2[2] + vector3[2]) / 3.0,
+        }
+    }
 }
 
+// DGGAL configuration
 const TRIANGLES: [[(u8, u8); 3]; 20] = [
     // Top triangles
     [(1, 0), (0, 0), (1, 1)],
@@ -152,4 +183,31 @@ const TRIANGLES: [[(u8, u8); 3]; 20] = [
     [(2, 4), (3, 4), (2, 3)],
     [(3, 5), (4, 5), (3, 4)],
     [(4, 6), (5, 6), (4, 5)],
+];
+
+const INDICES: [[u8; 3]; 20] = [
+    // Top triangles
+    [0, 1, 2],
+    [0, 2, 3],
+    [0, 3, 4],
+    [0, 4, 5],
+    [0, 5, 1],
+    // Mirror of Top triangles
+    [6, 2, 1],
+    [7, 3, 2],
+    [8, 4, 3],
+    [9, 5, 4],
+    [10, 1, 5],
+    // Mirror of Bottom triangles
+    [2, 6, 7],
+    [3, 7, 8],
+    [4, 8, 9],
+    [5, 9, 10],
+    [1, 10, 6],
+    // Bottom triangles
+    [11, 7, 6],
+    [11, 8, 7],
+    [11, 9, 8],
+    [11, 10, 9],
+    [11, 6, 10],
 ];

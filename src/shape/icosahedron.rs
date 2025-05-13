@@ -44,7 +44,12 @@ impl Polyhedron for Icosahedron {
     //     ico.planar_vertexes();
     //     ico;
     // }
-    fn get_faces(&self) -> u8 { 20 }
+    fn get_faces(&self) -> u8 {
+        20
+    }
+    fn get_indices(&self) -> Vec<[u8; 3]> {
+        vec![[2, 3, 5]]
+    }
     fn get_planar_vertexes(&self) -> Vec<[(u8, u8); 3]> {
         let a = [0.0, 0.0];
         let b = [0.8944, 0.0];
@@ -54,7 +59,11 @@ impl Polyhedron for Icosahedron {
         // Vertexes { a, b, c }
     }
     fn get_unit_vectors(&self) -> Vec<Vector3D> {
-        vec![Vector3D{x: 0.0, y: 0.0, z: 0.0}]
+        vec![Vector3D {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }]
     }
     fn get_triangle_unit_vectors(&self) -> UnitVectors {
         let aux = 1.0 / f64::sqrt(1.0 + pow(self::GOLDEN_RATIO, 2));

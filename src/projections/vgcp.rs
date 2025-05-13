@@ -32,8 +32,8 @@ impl Projection for Vgcp {
 
         // get 3d unit vectors of the icosahedron
         let ico_vectors = shape.get_unit_vectors();
-        println!("{:?}", ico_vectors);
-
+        let ico_indices = shape.get_indices();
+        // println!("{:?}",  ico_vectors[ico_indices[0][0]]);
         // /// @TODO: ADD TO CONSTANTS OF ICOSAHEDRON
         /// ABC
         let angle_beta: f64 = to_rad(36.0);
@@ -50,10 +50,14 @@ impl Projection for Vgcp {
             // Calculate 3d unit vectors for point P
             let vector_3d = Self::to_3d(to_rad(lat), to_rad(lon));
 
+            /// starting from here you need:
+            /// - the 3d point that you want to project
+            /// - the 3d vertexes of the icosahedron
+            /// - the 2d vertexes of the config 5x6
             /// Polyhedron faces
             let faces_length = shape.get_faces();
-        //     for index in 0..faces_length {
-        //         let face = usize::from(index);
+            for index in 0..faces_length {
+                let face = usize::from(index);
         //         println!("{:?}", index);
 
         //         /// get 3vector
@@ -67,7 +71,7 @@ impl Projection for Vgcp {
                     bc,
                     ac,
                     cp,
-                } = shape.get_triangle_arc_lengths(vector_3d);
+                } = shape.get_triangle_arc_lengths(vector_3d, ico_vectors[face], v2d[face]);
         //         // println!("{:?}", ac);
         //         // icoVertices -> vector 3d
         //         // vertices5x6 -> 2d vertezes
