@@ -1,6 +1,9 @@
+use std::f64::consts::PI;
 use std::usize;
 
 use crate::models::common::PositionGeo;
+use crate::models::quaternion::Quaternion;
+use crate::models::vector_3d::Vector3D;
 use crate::utils::math::{cos, sin, to_deg, to_rad};
 use crate::{traits::polyhedron::Polyhedron, utils::math::pow};
 
@@ -10,6 +13,9 @@ use crate::traits::polyhedron::{ArcLengths, UnitVectors, Vertexes};
 pub const GOLDEN_RATIO: f64 = 1.618;
 
 pub const FACES: u8 = 20;
+
+pub const ORIENTATION_LAT: f64 = 31.7174744114611;
+pub const ORIENTATION_LON: f64 = 11.20;
 
 #[derive(Default, Debug)]
 pub struct Rhombic5x6 {}
@@ -28,21 +34,80 @@ impl Polyhedron for Rhombic5x6 {
         let a = [0.0, aux, aux1];
         let b = [aux, aux1, 0.0];
         let c = [aux1, 0.0, aux];
-
         UnitVectors { a, b, c }
+    }
+    fn get_unit_vectors(&self) -> Vec<Vector3D> {
+        // Vertices authalic latitude - 26.565º
+        let t = f64::atan(0.5);
+        let ty = -t.sin();
+        let by = -(-t).sin();
+        let tc = t.cos();
+        let bc = (-t).cos();
+
+        // normalized radius
+        let r = 1.0;
+
+        // area of the icosahedron triangular face
+        let s = 2.0 * PI / 5.0;
+
+        let mut vertices = vec![
+            Vector3D { x: 0.0, y: 0.0, z: 0.0 };
+            20 // Preallocate enough space
+        ];
+
+        // North pole
+        vertices[0] = Vector3D {
+            x: 0.0,
+            y: -r,
+            z: 0.0,
+        };
+        // South pole
+        vertices[11] = Vector3D {
+            x: 0.0,
+            y: r,
+            z: 0.0,
+        };
+
+        let q = Quaternion::yaw_pitch(-ORIENTATION_LON.to_radians(), -ORIENTATION_LAT.to_radians());
+
+        for i in 0..5 {
+            let deg: f64 = (-180.0 - 36.0 / 2.0 - 72.0);
+            let ta = deg.to_radians() + s * i as f64;
+            let ba = ta + s / 2.0;
+
+            // North hemisphere
+            vertices[1 + i] = Vector3D {
+                x: ta.cos() * r * tc,
+                y: ty * r,
+                z: ta.sin() * r * tc,
+            };
+
+            // South hemisphere
+            vertices[6 + i] = Vector3D {
+                x: ba.cos() * r * bc,
+                y: by * r,
+                z: ba.sin() * r * bc,
+            };
+        }
+
+        for i in 0..12 {
+            vertices[i] = q.rotate_vector(vertices[i]);
+        }
+
+        vertices.to_vec()
     }
 
     // to 90 degrees right triangle
-    fn get_triangle_arc_lengths(&self, p: &PositionGeo) -> ArcLengths {
+    fn get_triangle_arc_lengths(&self, vector: [f64; 3]) -> ArcLengths {
         let uvs = self.get_triangle_unit_vectors();
         let dot_ab = 0.0;
         let ab = f64::acos(dot_ab);
         let bc = f64::acos(uvs.b[0] * uvs.c[0] + uvs.b[1] * uvs.c[1] + uvs.b[2] * uvs.c[2]);
         let ac = f64::acos(uvs.a[0] * uvs.c[0] + uvs.a[1] * uvs.c[1] + uvs.a[2] * uvs.c[2]);
 
-        let lat = to_rad(p.lat);
-        let lon = to_rad(p.lon);
-        // calculate unit vectors for point P
+        let lat = to_rad(0.0);
+        let lon = to_rad(0.0);
+        // calculate 3d unit vectors for point P
         let uv_px = cos(lat) * cos(lon);
         let uv_py = cos(lat) * sin(lon);
         let uv_pz = sin(lat);
@@ -87,5 +152,4 @@ const TRIANGLES: [[(u8, u8); 3]; 20] = [
     [(2, 4), (3, 4), (2, 3)],
     [(3, 5), (4, 5), (3, 4)],
     [(4, 6), (5, 6), (4, 5)],
-]
-;
+];

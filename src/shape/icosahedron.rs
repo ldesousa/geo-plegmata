@@ -1,4 +1,5 @@
 use crate::models::common::PositionGeo;
+use crate::models::vector_3d::Vector3D;
 use crate::utils::math::{cos, sin, to_deg, to_rad};
 use crate::{traits::polyhedron::Polyhedron, utils::math::pow};
 
@@ -52,6 +53,9 @@ impl Polyhedron for Icosahedron {
         [[(1, 0), (0, 0), (1, 1)]].to_vec()
         // Vertexes { a, b, c }
     }
+    fn get_unit_vectors(&self) -> Vec<Vector3D> {
+        vec![Vector3D{x: 0.0, y: 0.0, z: 0.0}]
+    }
     fn get_triangle_unit_vectors(&self) -> UnitVectors {
         let aux = 1.0 / f64::sqrt(1.0 + pow(self::GOLDEN_RATIO, 2));
         let aux1 = self::GOLDEN_RATIO / f64::sqrt(1.0 + pow(self::GOLDEN_RATIO, 2));
@@ -64,15 +68,15 @@ impl Polyhedron for Icosahedron {
     }
 
     // to 90 degrees right triangle
-    fn get_triangle_arc_lengths(&self, p: &PositionGeo) -> ArcLengths {
+    fn get_triangle_arc_lengths(&self, p: [f64; 3]) -> ArcLengths {
         let uvs = self.get_triangle_unit_vectors();
         let dot_ab = 0.0;
         let ab = f64::acos(dot_ab);
         let bc = f64::acos(uvs.b[0] * uvs.c[0] + uvs.b[1] * uvs.c[1] + uvs.b[2] * uvs.c[2]);
         let ac = f64::acos(uvs.a[0] * uvs.c[0] + uvs.a[1] * uvs.c[1] + uvs.a[2] * uvs.c[2]);
 
-        let lat = to_rad(p.lat);
-        let lon = to_rad(p.lon);
+        let lat = to_rad(0.0);
+        let lon = to_rad(0.0);
         // calculate unit vectors for point P
         let uv_px = cos(lat) * cos(lon);
         let uv_py = cos(lat) * sin(lon);

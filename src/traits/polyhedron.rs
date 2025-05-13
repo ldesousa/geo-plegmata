@@ -1,4 +1,4 @@
-use crate::models::common::PositionGeo;
+use crate::models::{common::PositionGeo, vector_3d::Vector3D};
 
 pub trait Polyhedron {
     // fn new(self) ;
@@ -7,8 +7,9 @@ pub trait Polyhedron {
     // fn plane_angle(&self) -> f64;
     fn get_faces(&self) -> u8;
     fn get_planar_vertexes(&self) -> Vec<[(u8, u8); 3]>;
+    fn get_unit_vectors(&self) -> Vec<Vector3D>;
     fn get_triangle_unit_vectors(&self) -> UnitVectors;
-    fn get_triangle_arc_lengths(&self, p: &PositionGeo) -> ArcLengths;
+    fn get_triangle_arc_lengths(&self, vector: [f64; 3]) -> ArcLengths;
 }
 
 #[derive(Default, Debug)]
