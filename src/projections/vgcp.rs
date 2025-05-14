@@ -22,10 +22,6 @@ use super::constants::COEF_GEOD_TO_AUTH_LAT;
 /// http://dx.doi.org/10.1559/152304006779500687
 pub struct Vgcp;
 
-// - conseguir os vertices dos triangulos, achar a configuração do Icosahedron
-// - Achar onde os pontos se encontram no triangulo
-// https://chatgpt.com/c/68091cde-4428-8002-beb3-6713a35494ec
-
 impl Projection for Vgcp {
     fn forward(&self, positions: Vec<PositionGeo>, shape: &dyn Polyhedron) -> Vec<Position2D> {
         let mut out: Vec<Position2D> = vec![];
@@ -36,13 +32,12 @@ impl Projection for Vgcp {
         // get 3d unit vectors of the icosahedron
         let ico_vectors = shape.get_unit_vectors();
         let triangles_ids = shape.get_indices();
-        // println!("{:?}",  ico_vectors[ico_indices[0][0]]);
-        // /// @TODO: ADD TO CONSTANTS OF ICOSAHEDRON
-        /// ABC
+
+        // ABC
         let angle_beta: f64 = to_rad(36.0);
-        /// BCA
+        // BCA
         let angle_gamma: f64 = to_rad(60.0);
-        /// BAC
+        // BAC
         let angle_alpha: f64 = PI / 2.0;
 
         let v2d = shape.get_planar_vertexes();
@@ -53,11 +48,11 @@ impl Projection for Vgcp {
             // Calculate 3d unit vectors for point P
             let vector_3d = Vector3D::from_array(Self::to_3d(to_rad(lat), to_rad(lon)));
 
-            /// starting from here you need:
-            /// - the 3d point that you want to project
-            /// - the 3d vertexes of the icosahedron
-            /// - the 2d vertexes of the config 5x6
-            /// Polyhedron faces
+            // starting from here you need:
+            // - the 3d point that you want to project
+            // - the 3d vertexes of the icosahedron
+            // - the 2d vertexes of the config 5x6
+            // Polyhedron faces
             let faces_length = shape.get_faces();
             for index in 0..faces_length {
                 let face = usize::from(index);
@@ -68,14 +63,7 @@ impl Projection for Vgcp {
                     ico_vectors[ids[1] as usize],
                     ico_vectors[ids[2] as usize],
                 ];
-                //         println!("{:?}", index);
-
-                //         /// get 3vector
                 if (shape.is_point_in_triangle(vector_3d, triangle_3d.clone())) {
-                    // println!(
-                    //     "{:?} \n {:?}",
-                    //     ico_vectors[ico_indices[face][1] as usize], ico_indices[face][1]
-                    // );
                     let ArcLengths {
                         ab,
                         bp,
@@ -84,11 +72,9 @@ impl Projection for Vgcp {
                         ac,
                         cp,
                     } = shape.get_triangle_arc_lengths(vector_3d, triangle_3d, v2d[face]);
-                    // println!("{:?}", ac);
+
                     // icoVertices -> vector 3d
                     // vertices5x6 -> 2d vertezes
-
-                    // let uvs = shape.get_triangle_unit_vectors();
 
                     // angle ρ
                     let rho: f64 = f64::acos(cos(ap) - cos(ab) * cos(bp)) / (sin(ab) * sin(bp));
@@ -134,16 +120,6 @@ impl Projection for Vgcp {
         // vec![Position2D { x: 0.0, y: 0.0 }]
     }
     fn inverse(&self) -> String {
-        "todo!()".to_string()
+        todo!()
     }
 }
-
-// impl Projection<Tetra> for Ivgcp {
-//     fn forward(positions: Vec<Position>, shape: &Tetra) -> [f64; 2] {
-//         todo!()
-//     }
-
-//     fn inverse(&self) -> String {
-//         todo!()
-//     }
-// }

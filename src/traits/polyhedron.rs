@@ -1,10 +1,6 @@
-use crate::models::{common::{Position2D, PositionGeo}, vector_3d::Vector3D};
+use crate::models::{common::{Position2D}, vector_3d::Vector3D};
 
 pub trait Polyhedron {
-    // fn new(self) ;
-    // fn golden_ratio(&self) -> f64;
-    // fn spherical_distance(&self) -> f64;
-    // fn plane_angle(&self) -> f64;
     fn get_faces(&self) -> u8;
     fn get_planar_vertexes(&self) -> Vec<[(u8, u8); 3]>;
     fn get_indices(&self) -> Vec<[u8; 3]>;

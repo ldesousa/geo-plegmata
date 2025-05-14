@@ -1,14 +1,11 @@
 use std::f64::consts::PI;
-use std::usize;
-
-use crate::models::common::{Position2D, PositionGeo};
+use crate::models::common::{Position2D};
 use crate::models::plane::Plane;
 use crate::models::quaternion::Quaternion;
 use crate::models::vector_3d::Vector3D;
-use crate::utils::math::{cos, sin, to_deg, to_rad};
 use crate::{traits::polyhedron::Polyhedron, utils::math::pow};
 
-use crate::traits::polyhedron::{ArcLengths, UnitVectors, Vertexes};
+use crate::traits::polyhedron::{ArcLengths, UnitVectors};
 
 /// (1 + sqrt(5)) / 2
 pub const GOLDEN_RATIO: f64 = 1.618;
