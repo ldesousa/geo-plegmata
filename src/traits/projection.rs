@@ -1,15 +1,18 @@
 use crate::{
     models::common::{Position2D, PositionGeo},
-    projections::constants::{
-        COEF_AUTH_TO_GEOD_LAT, COEF_GEOD_TO_AUTH_LAT, ELIPSOID_MAJOR, ELIPSOID_MINOR,
-    },
+    projections::constants::{ELIPSOID_MAJOR, ELIPSOID_MINOR},
     utils::math::{cos, pow, sin},
 };
 
-use super::polyhedron::Polyhedron;
+use super::{layout::Layout, polyhedron::Polyhedron};
 
 pub trait Projection {
-    fn forward(&self, positions: Vec<PositionGeo>, shape: &dyn Polyhedron) -> Vec<Position2D>;
+    fn forward(
+        &self,
+        positions: Vec<PositionGeo>,
+        shape: &dyn Polyhedron,
+        layout: &dyn Layout,
+    ) -> Vec<Position2D>;
     fn inverse(&self) -> String;
 
     fn to_3d(lat: f64, lon: f64) -> [f64; 3] {

@@ -1,6 +1,5 @@
 use geo_plegmata::{
-    models::common::PositionGeo, projections::vgcp::Vgcp, shape::rhombic5x6::Rhombic5x6,
-    traits::projection::Projection,
+    layout::rhombic5x6::Rhombic5x6, models::common::PositionGeo, projections::vgcp::Vgcp, polyhedron::icosahedron::Icosahedron, traits::projection::Projection
 };
 
 fn main() {
@@ -10,7 +9,7 @@ fn main() {
     };
     let projection = Vgcp;
 
-    let result = projection.forward(vec![position], &Rhombic5x6 {});
+    let result = projection.forward(vec![position], &Icosahedron {}, &Rhombic5x6 {});
     // let proj =Vgcp::new(position);
     println!("Result {:?}!", result);
 }

@@ -6,6 +6,7 @@ use crate::{
         vector_3d::Vector3D,
     },
     traits::{
+        layout::Layout,
         polyhedron::{ArcLengths, Polyhedron},
         projection::Projection,
     },
@@ -23,7 +24,12 @@ use super::constants::COEF_GEOD_TO_AUTH_LAT;
 pub struct Vgcp;
 
 impl Projection for Vgcp {
-    fn forward(&self, positions: Vec<PositionGeo>, shape: &dyn Polyhedron) -> Vec<Position2D> {
+    fn forward(
+        &self,
+        positions: Vec<PositionGeo>,
+        shape: &dyn Polyhedron,
+        layout: &dyn Layout,
+    ) -> Vec<Position2D> {
         let mut out: Vec<Position2D> = vec![];
 
         // convert from geodetic to authalic
@@ -40,7 +46,7 @@ impl Projection for Vgcp {
         // BAC
         let angle_alpha: f64 = PI / 2.0;
 
-        let v2d = shape.get_planar_vertexes();
+        let v2d = layout.vertices();
 
         for position in positions {
             let lon = position.lon;

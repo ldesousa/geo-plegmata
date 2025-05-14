@@ -16,12 +16,13 @@ pub const ORIENTATION_LAT: f64 = 31.7174744114611;
 pub const ORIENTATION_LON: f64 = 11.20;
 
 #[derive(Default, Debug)]
-pub struct Rhombic5x6 {}
+pub struct Icosahedron {}
 
-impl Polyhedron for Rhombic5x6 {
+impl Polyhedron for Icosahedron {
     fn get_faces(&self) -> u8 {
         FACES
     }
+    // for layout
     fn get_planar_vertexes(&self) -> Vec<[(u8, u8); 3]> {
         TRIANGLES.to_vec()
     }
@@ -239,6 +240,7 @@ impl Polyhedron for Rhombic5x6 {
             2.0 * s.clamp(-1.0, 1.0).asin()
         }
     }
+    // for layout
     fn get_face_center_2d(&self, p: [(u8, u8); 3]) -> Position2D {
         Position2D {
             x: f64::from((p[0].0 + p[1].0 + p[2].0) / 3),
