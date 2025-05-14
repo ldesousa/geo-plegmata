@@ -77,32 +77,58 @@ impl Polyhedron for Icosahedron {
     }
 
     // to 90 degrees right triangle
-    fn get_triangle_arc_lengths(&self, p: [f64; 3]) -> ArcLengths {
-        let uvs = self.get_triangle_unit_vectors();
-        let dot_ab = 0.0;
-        let ab = f64::acos(dot_ab);
-        let bc = f64::acos(uvs.b[0] * uvs.c[0] + uvs.b[1] * uvs.c[1] + uvs.b[2] * uvs.c[2]);
-        let ac = f64::acos(uvs.a[0] * uvs.c[0] + uvs.a[1] * uvs.c[1] + uvs.a[2] * uvs.c[2]);
+    fn get_triangle_arc_lengths(&self,
+        vector: Vector3D,
+        face_vectors: Vec<Vector3D>,
+        face_vertices: [(u8, u8); 3]) -> ArcLengths {
+        // let uvs = self.get_triangle_unit_vectors();
+        // let dot_ab = 0.0;
+        // let ab = f64::acos(dot_ab);
+        // let bc = f64::acos(uvs.b[0] * uvs.c[0] + uvs.b[1] * uvs.c[1] + uvs.b[2] * uvs.c[2]);
+        // let ac = f64::acos(uvs.a[0] * uvs.c[0] + uvs.a[1] * uvs.c[1] + uvs.a[2] * uvs.c[2]);
 
-        let lat = to_rad(0.0);
-        let lon = to_rad(0.0);
-        // calculate unit vectors for point P
-        let uv_px = cos(lat) * cos(lon);
-        let uv_py = cos(lat) * sin(lon);
-        let uv_pz = sin(lat);
+        // let lat = to_rad(0.0);
+        // let lon = to_rad(0.0);
+        // // calculate unit vectors for point P
+        // let uv_px = cos(lat) * cos(lon);
+        // let uv_py = cos(lat) * sin(lon);
+        // let uv_pz = sin(lat);
 
-        let ap = f64::acos(uvs.a[0] * uv_px + uvs.a[1] * uv_py + uvs.a[2] * uv_pz); //f64::acos(uvs.a[0] * uvp[0] + uvs.a[1] * uvp[1] + uvs.a[2] * uvp[2]);
-        let bp = f64::acos(uvs.b[0] * uv_px + uvs.b[1] * uv_py + uvs.b[2] * uv_pz);
-        let cp = f64::acos(uvs.c[0] * uv_px + uvs.c[1] * uv_py + uvs.c[2] * uv_pz);
+        // let ap = f64::acos(uvs.a[0] * uv_px + uvs.a[1] * uv_py + uvs.a[2] * uv_pz); //f64::acos(uvs.a[0] * uvp[0] + uvs.a[1] * uvp[1] + uvs.a[2] * uvp[2]);
+        // let bp = f64::acos(uvs.b[0] * uv_px + uvs.b[1] * uv_py + uvs.b[2] * uv_pz);
+        // let cp = f64::acos(uvs.c[0] * uv_px + uvs.c[1] * uv_py + uvs.c[2] * uv_pz);
 
-        ArcLengths {
-            ab,
-            bc,
-            ac,
-            ap,
-            bp,
-            cp,
-        }
+        // ArcLengths {
+        //     ab,
+        //     bc,
+        //     ac,
+        //     ap,
+        //     bp,
+        //     cp,
+        // }
+        todo!()
+
+    }
+    
+    fn get_face_center_2d(&self, face_vertices: [(u8, u8); 3]) -> crate::models::common::Position2D {
+        todo!()
+    }
+    
+    fn get_face_center_3d(
+        &self,
+        vector1: Vector3D,
+        vector2: Vector3D,
+        vector3: Vector3D,
+    ) -> Vector3D {
+        todo!()
+    }
+    
+    fn is_point_in_triangle(&self, point: Vector3D, triangle: Vec<Vector3D>) -> bool {
+        todo!()
+    }
+    
+    fn angle_between_unit(&self, u: Vector3D, v: Vector3D) -> f64 {
+        todo!()
     }
     // fn get_center_faces_icosahedron() -> Vec<Position> {
     //     let e: f64 = 90.0 - consts::SPHERICAL_DISTANCE; // E in degrees

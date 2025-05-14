@@ -1,7 +1,10 @@
 use std::f64::consts::{E, PI};
 
 use crate::{
-    models::common::{Position2D, PositionGeo},
+    models::{
+        common::{Position2D, PositionGeo},
+        vector_3d::Vector3D,
+    },
     traits::{
         polyhedron::{ArcLengths, Polyhedron},
         projection::Projection,
@@ -32,7 +35,7 @@ impl Projection for Vgcp {
 
         // get 3d unit vectors of the icosahedron
         let ico_vectors = shape.get_unit_vectors();
-        let ico_indices = shape.get_indices();
+        let triangles_ids = shape.get_indices();
         // println!("{:?}",  ico_vectors[ico_indices[0][0]]);
         // /// @TODO: ADD TO CONSTANTS OF ICOSAHEDRON
         /// ABC
@@ -48,7 +51,7 @@ impl Projection for Vgcp {
             let lon = position.lon;
             let lat = Self::lat_geodetic_to_authalic(position.lat, &coef_fourier_geod_to_auth);
             // Calculate 3d unit vectors for point P
-            let vector_3d = Self::to_3d(to_rad(lat), to_rad(lon));
+            let vector_3d = Vector3D::from_array(Self::to_3d(to_rad(lat), to_rad(lon)));
 
             /// starting from here you need:
             /// - the 3d point that you want to project
@@ -58,67 +61,77 @@ impl Projection for Vgcp {
             let faces_length = shape.get_faces();
             for index in 0..faces_length {
                 let face = usize::from(index);
-        //         println!("{:?}", index);
+                let ids = triangles_ids[face];
 
-        //         /// get 3vector
-        //         /// ...
-        //         // for p in positions {
-        //         // let p = &positions[0];
-                let ArcLengths {
-                    ab,
-                    bp,
-                    ap,
-                    bc,
-                    ac,
-                    cp,
-                } = shape.get_triangle_arc_lengths(vector_3d, ico_vectors[face], v2d[face]);
-        //         // println!("{:?}", ac);
-        //         // icoVertices -> vector 3d
-        //         // vertices5x6 -> 2d vertezes
+                let triangle_3d = vec![
+                    ico_vectors[ids[0] as usize],
+                    ico_vectors[ids[1] as usize],
+                    ico_vectors[ids[2] as usize],
+                ];
+                //         println!("{:?}", index);
 
-        //         // let uvs = shape.get_triangle_unit_vectors();
+                //         /// get 3vector
+                if (shape.is_point_in_triangle(vector_3d, triangle_3d.clone())) {
+                    // println!(
+                    //     "{:?} \n {:?}",
+                    //     ico_vectors[ico_indices[face][1] as usize], ico_indices[face][1]
+                    // );
+                    let ArcLengths {
+                        ab,
+                        bp,
+                        ap,
+                        bc,
+                        ac,
+                        cp,
+                    } = shape.get_triangle_arc_lengths(vector_3d, triangle_3d, v2d[face]);
+                    // println!("{:?}", ac);
+                    // icoVertices -> vector 3d
+                    // vertices5x6 -> 2d vertezes
 
-        //         // angle ρ
-        //         let rho: f64 = f64::acos(cos(ap) - cos(ab) * cos(bp)) / (sin(ab) * sin(bp));
+                    // let uvs = shape.get_triangle_unit_vectors();
 
-        //         // /// 1. Calculate delta (δ)
-        //         let delta = f64::acos(f64::sin(rho) * f64::cos(ab));
+                    // angle ρ
+                    let rho: f64 = f64::acos(cos(ap) - cos(ab) * cos(bp)) / (sin(ab) * sin(bp));
 
-        //         // /// 2. Calculate u
-        //         let uv = (angle_beta + angle_gamma - rho - delta)
-        //             / (angle_beta + angle_gamma - PI / 2.0);
+                    // /// 1. Calculate delta (δ)
+                    let delta = f64::acos(f64::sin(rho) * f64::cos(ab));
 
-        //         let cosXpY;
-        //         if rho <= pow(E, -9) {
-        //             cosXpY = cos(ab);
-        //         } else {
-        //             cosXpY = 1.0 / (tan(rho) * tan(delta))
-        //         }
+                    // /// 2. Calculate u
+                    let uv = (angle_beta + angle_gamma - rho - delta)
+                        / (angle_beta + angle_gamma - PI / 2.0);
 
-        //         let xy = f64::sqrt((1.0 - cos(bp)) / (1.0 - cosXpY));
+                    let cosXpY;
+                    if rho <= pow(E, -9) {
+                        cosXpY = cos(ab);
+                    } else {
+                        cosXpY = 1.0 / (tan(rho) * tan(delta))
+                    }
 
-        //         // triangle vertexes
-        //         let vx0 = f64::from(v2d[face][0].0);
-        //         let vy0 = f64::from(v2d[face][0].1);
-        //         let vx1 = f64::from(v2d[face][1].0);
-        //         let vy1 = f64::from(v2d[face][1].1);
-        //         let vx2 = f64::from(v2d[face][2].0);
-        //         let vy2 = f64::from(v2d[face][2].1);
-        //         // entre o A e o C que dá o ponto D
-        //         let pdi_x = vx2 + (vx0 - vx2) * uv;
-        //         let pdi_y = vy2 + (vy0 - vy2) * uv;
+                    let xy = f64::sqrt((1.0 - cos(bp)) / (1.0 - cosXpY));
 
-        //         // entre o D e o B que dá o ponto P
-        //         let pdi_x = pdi_x + (pdi_x - vx1) * xy;
-        //         let pdi_y = pdi_y + (pdi_y - vy1) * xy;
+                    // triangle vertexes
+                    let vx0 = f64::from(v2d[face][0].0);
+                    let vy0 = f64::from(v2d[face][0].1);
+                    let vx1 = f64::from(v2d[face][1].0);
+                    let vy1 = f64::from(v2d[face][1].1);
+                    let vx2 = f64::from(v2d[face][2].0);
+                    let vy2 = f64::from(v2d[face][2].1);
+                    // entre o A e o C que dá o ponto D
+                    let pdi_x = vx2 + (vx0 - vx2) * uv;
+                    let pdi_y = vy2 + (vy0 - vy2) * uv;
 
-        //         out.push(Position2D { x: pdi_x, y: pdi_y });
-        //     }
+                    // entre o D e o B que dá o ponto P
+                    let pdi_x = pdi_x + (pdi_x - vx1) * xy;
+                    let pdi_y = pdi_y + (pdi_y - vy1) * xy;
+
+                    out.push(Position2D { x: pdi_x, y: pdi_y });
+                }
+            }
         }
 
         // // }
-        // out
-        vec![Position2D { x: 0.0, y: 0.0 }]
+        out
+        // vec![Position2D { x: 0.0, y: 0.0 }]
     }
     fn inverse(&self) -> String {
         "todo!()".to_string()
