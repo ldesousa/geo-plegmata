@@ -103,8 +103,8 @@ impl Projection for Vgc {
                     let pd_y = p2.y + (p0.y - p2.y) * uv;
 
                     // Between D and B it gives point P
-                    let p_x = px + (pd_x - p1.x) * xy;
-                    let p_y = px + (pd_x - p1.y) * xy;
+                    let p_x = pd_x + (pd_x - p1.x) * xy;
+                    let p_y = pd_x + (pd_x - p1.y) * xy;
 
                     out.push(Position2D { x: p_x, y: p_y });
                 }
