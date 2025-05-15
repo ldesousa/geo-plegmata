@@ -98,22 +98,20 @@ impl Projection for Vgc {
                     // triangle vertexes
                     let (p0, p1, p2) = (&triangle_2d[0], &triangle_2d[1], &triangle_2d[2]);
 
-                    // entre o A e o C que dá o ponto D
-                    let px = p2.x + (p0.x - p2.x) * uv;
-                    let py = p2.y + (p0.y - p2.y) * uv;
+                    // Between A e o C it gives point D
+                    let pd_x = p2.x + (p0.x - p2.x) * uv;
+                    let pd_y = p2.y + (p0.y - p2.y) * uv;
 
-                    // entre o D e o B que dá o ponto P
-                    let px = px + (px - p1.x) * xy;
-                    let py = px + (py - p1.y) * xy;
+                    // Between D and B it gives point P
+                    let p_x = px + (pd_x - p1.x) * xy;
+                    let p_y = px + (pd_x - p1.y) * xy;
 
-                    out.push(Position2D { x: px, y: py });
+                    out.push(Position2D { x: p_x, y: p_y });
                 }
             }
         }
 
-        // // }
         out
-        // vec![Position2D { x: 0.0, y: 0.0 }]
     }
     fn inverse(&self) -> String {
         todo!()
