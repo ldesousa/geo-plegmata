@@ -1,6 +1,13 @@
 GeoPlegmata
 ===========
 
+Copyright
+---------
+Copyright (c) 2025 contributors to the GeoPlegmata project. All rights reserved. Any use of this software constitutes full acceptance of all terms of its licence.
+
+Overview
+--------
+
 This project aims to be an harbour for individuals, companies and other projects developing software implementing or using Discrete Global Grid Systems (DGGS). It is meant as an accreation point, around which collaboration synergies can accelerate the development of modern Geographic Information Systems (GIS), multiplying benefits to those contributing.
 
 Ambitious? Certainly. Necessary? Absolutely. DGGS software has existed for more than twenty years, but is yet to have the impact on GIS (and GeoSciences at large) it should have. Dispersion of effort and objectives has been a major element in this delay.
@@ -10,6 +17,11 @@ The abstractions proposed by GeoPlegmata are meant to not only accelerate develo
 ### The name
 
 The term *geo* is Greek for Earth. Since DGGSs are primarilly concieved as grids on the Earth's surface, it seems appropriate to use the Greek term for grids, *plegmata*, to compose the name. *Plegmata* is plural for *plegma*, a grid. 
+
+Licence
+-------
+
+This project is Licensed under the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0) LICENSE-APACHE or the [MIT license](http://opensource.org/licenses/MIT), at your discretion. All contents herewith  may not be copied, modified, or distributed except according to the terms defined in the licence chosen. Refer to the files [LICENCE-APACHE.txt](LICENCE-APACHE.txt) and [LICENCE-MIT.txt](LICENCE-MIT.txt) for details.
 
 The Pillars
 ===========
