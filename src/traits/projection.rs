@@ -10,7 +10,7 @@ pub trait Projection {
     fn forward(
         &self,
         positions: Vec<PositionGeo>,
-        shape: &dyn Polyhedron,
+        polyhedron: Option<&dyn Polyhedron>,
         layout: &dyn Layout,
     ) -> Vec<Position2D>;
     fn inverse(&self) -> String;

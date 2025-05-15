@@ -17,34 +17,35 @@ use super::constants::COEF_GEOD_TO_AUTH_LAT;
 
 // use super::vgcp::Vgcp;
 
-/// Implementation for Icosahedron Vertex Great Circle Projection.
-/// vgcp - Vertex Great Circle Projection.
+/// Implementation for Vertex Great Circle projection (or van Leeuwen Great Circle projection).
+/// vgc - Vertex Great Circle projection.
 /// Based on the slice and dice approach from this article:
 /// http://dx.doi.org/10.1559/152304006779500687
-pub struct Vgcp;
+pub struct Vgc;
 
-impl Projection for Vgcp {
+impl Projection for Vgc {
     fn forward(
         &self,
         positions: Vec<PositionGeo>,
-        shape: &dyn Polyhedron,
+        polyhedron: Option<&dyn Polyhedron>,
         layout: &dyn Layout,
     ) -> Vec<Position2D> {
         let mut out: Vec<Position2D> = vec![];
+        let polyhedron = polyhedron.unwrap();
 
-        // convert from geodetic to authalic
+        // Need the coeficcients to convert from geodetic to authalic
         let coef_fourier_geod_to_auth = Self::compute_fourier_coefficients(COEF_GEOD_TO_AUTH_LAT);
 
         // get 3d unit vectors of the icosahedron
-        let ico_vectors = shape.get_unit_vectors();
-        let triangles_ids = shape.get_indices();
+        let ico_vectors = polyhedron.unit_vectors();
+        let triangles_ids = polyhedron.indices();
 
         // ABC
         let angle_beta: f64 = to_rad(36.0);
         // BCA
         let angle_gamma: f64 = to_rad(60.0);
-        // BAC
-        let angle_alpha: f64 = PI / 2.0;
+        // // BAC
+        // let angle_alpha: f64 = PI / 2.0;
 
         let v2d = layout.vertices();
 
@@ -59,7 +60,7 @@ impl Projection for Vgcp {
             // - the 3d vertexes of the icosahedron
             // - the 2d vertexes of the config 5x6
             // Polyhedron faces
-            let faces_length = shape.get_faces();
+            let faces_length = polyhedron.faces();
             for index in 0..faces_length {
                 let face = usize::from(index);
                 let ids = triangles_ids[face];
@@ -69,18 +70,11 @@ impl Projection for Vgcp {
                     ico_vectors[ids[1] as usize],
                     ico_vectors[ids[2] as usize],
                 ];
-                if (shape.is_point_in_triangle(vector_3d, triangle_3d.clone())) {
-                    let ArcLengths {
-                        ab,
-                        bp,
-                        ap,
-                        bc,
-                        ac,
-                        cp,
-                    } = shape.get_triangle_arc_lengths(vector_3d, triangle_3d, v2d[face]);
-
-                    // icoVertices -> vector 3d
-                    // vertices5x6 -> 2d vertezes
+                if polyhedron.is_point_in_triangle(vector_3d, triangle_3d.clone()) {
+                    let (triangle_3d, triangle_2d) =
+                        polyhedron.triangles(layout, vector_3d, triangle_3d, v2d[face]);
+                    let ArcLengths { ab, bp, ap, .. } =
+                        polyhedron.triangle_arc_lengths(triangle_3d, vector_3d);
 
                     // angle ρ
                     let rho: f64 = f64::acos(cos(ap) - cos(ab) * cos(bp)) / (sin(ab) * sin(bp));
@@ -92,31 +86,27 @@ impl Projection for Vgcp {
                     let uv = (angle_beta + angle_gamma - rho - delta)
                         / (angle_beta + angle_gamma - PI / 2.0);
 
-                    let cosXpY;
+                    let cos_xp_y;
                     if rho <= pow(E, -9) {
-                        cosXpY = cos(ab);
+                        cos_xp_y = cos(ab);
                     } else {
-                        cosXpY = 1.0 / (tan(rho) * tan(delta))
+                        cos_xp_y = 1.0 / (tan(rho) * tan(delta))
                     }
 
-                    let xy = f64::sqrt((1.0 - cos(bp)) / (1.0 - cosXpY));
+                    let xy = f64::sqrt((1.0 - cos(bp)) / (1.0 - cos_xp_y));
 
                     // triangle vertexes
-                    let vx0 = f64::from(v2d[face][0].0);
-                    let vy0 = f64::from(v2d[face][0].1);
-                    let vx1 = f64::from(v2d[face][1].0);
-                    let vy1 = f64::from(v2d[face][1].1);
-                    let vx2 = f64::from(v2d[face][2].0);
-                    let vy2 = f64::from(v2d[face][2].1);
+                    let (p0, p1, p2) = (&triangle_2d[0], &triangle_2d[1], &triangle_2d[2]);
+
                     // entre o A e o C que dá o ponto D
-                    let pdi_x = vx2 + (vx0 - vx2) * uv;
-                    let pdi_y = vy2 + (vy0 - vy2) * uv;
+                    let px = p2.x + (p0.x - p2.x) * uv;
+                    let py = p2.y + (p0.y - p2.y) * uv;
 
                     // entre o D e o B que dá o ponto P
-                    let pdi_x = pdi_x + (pdi_x - vx1) * xy;
-                    let pdi_y = pdi_y + (pdi_y - vy1) * xy;
+                    let px = px + (px - p1.x) * xy;
+                    let py = px + (py - p1.y) * xy;
 
-                    out.push(Position2D { x: pdi_x, y: pdi_y });
+                    out.push(Position2D { x: px, y: py });
                 }
             }
         }
@@ -127,5 +117,23 @@ impl Projection for Vgcp {
     }
     fn inverse(&self) -> String {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{layout::rhombic5x6::Rhombic5x6, models::common::PositionGeo, polyhedron::icosahedron::Icosahedron, traits::projection::Projection};
+
+    use super::Vgc;
+
+    fn project_forward() {
+        let position = PositionGeo {
+            lat: 38.695125,
+            lon: -9.222154,
+        };
+        let projection = Vgc;
+
+        let result = projection.forward(vec![position], Some(&Icosahedron {}), &Rhombic5x6 {});
+
     }
 }

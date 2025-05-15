@@ -1,20 +1,21 @@
-use crate::models::{common::{Position2D}, vector_3d::Vector3D};
+use crate::models::{common::Position2D, vector_3d::Vector3D};
+
+use super::layout::Layout;
 
 pub trait Polyhedron {
-    fn get_faces(&self) -> u8;
-    fn get_planar_vertexes(&self) -> Vec<[(u8, u8); 3]>;
-    fn get_indices(&self) -> Vec<[u8; 3]>;
-    fn get_unit_vectors(&self) -> Vec<Vector3D>;
-    fn get_triangle_unit_vectors(&self) -> UnitVectors;
-    fn get_triangle_arc_lengths(
+    fn faces(&self) -> u8;
+    fn indices(&self) -> Vec<[u8; 3]>;
+    fn unit_vectors(&self) -> Vec<Vector3D>;
+    fn triangles(
         &self,
+        layout: &dyn Layout,
         vector: Vector3D,
-        shape_vectors: Vec<Vector3D>,
-
+        face_vectors: Vec<Vector3D>,
         face_vertices: [(u8, u8); 3],
-    ) -> ArcLengths;
-    fn get_face_center_2d(&self, face_vertices: [(u8, u8); 3]) -> Position2D;
-    fn get_face_center_3d(
+    ) -> ([Vector3D; 3], [Position2D; 3]);
+    fn triangle_arc_lengths(&self, triangle: [Vector3D; 3],
+        vector: Vector3D) -> ArcLengths;
+    fn face_center(
         &self,
         vector1: Vector3D,
         vector2: Vector3D,
