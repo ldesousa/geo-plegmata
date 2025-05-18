@@ -7,7 +7,7 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::models::common::{CellGEO, CellsGEO};
+use crate::models::common::{Zone, Zones};
 use crate::models::dggrid::CellID;
 use crate::models::dggrid::IdArray;
 use core::f64;
@@ -91,7 +91,7 @@ pub fn dggrid_parse(
     children_path: &PathBuf,
     neighbor_path: &PathBuf,
     dggs_res_spec: &u8,
-) -> CellsGEO {
+) -> Zones {
     let aigen_data = read_file(&aigen_path);
     let mut result = parse_aigen(&aigen_data, &dggs_res_spec);
     let children_data = read_file(&children_path);
@@ -104,9 +104,9 @@ pub fn dggrid_parse(
     result
 }
 
-pub fn parse_aigen(data: &String, dggs_res_spec: &u8) -> CellsGEO {
-    let mut cell_id = CellID::default();
-    let mut cells_geo = CellsGEO { cells: Vec::new() };
+pub fn parse_aigen(data: &String, dggs_res_spec: &u8) -> Zones {
+    let mut zone_id = CellID::default();
+    let mut cells_geo = Zones { cells: Vec::new() };
 
     let mut raw_coords: Vec<(f64, f64)> = vec![];
     let mut ply: Polygon;
@@ -123,7 +123,7 @@ pub fn parse_aigen(data: &String, dggs_res_spec: &u8) -> CellsGEO {
         if line_parts.len() == 3 {
             // For ISEA3H prepend zero-padded dggs_res_spec to the ID
             let id_str = format!("{:02}{}", dggs_res_spec, line_parts[0]);
-            cell_id = CellID::new(&id_str).expect("Cannot accept this id");
+            zone_id = CellID::new(&id_str).expect("Cannot accept this id");
             pnt = Point::new(
                 line_parts[1]
                     .parse::<f64>()
@@ -147,15 +147,15 @@ pub fn parse_aigen(data: &String, dggs_res_spec: &u8) -> CellsGEO {
         } else if line_parts.len() == 1 && line_parts[0] == "END" && v_count > 1 {
             ply = Polygon::new(LineString::from(raw_coords.clone()), vec![]);
 
-            let cell_geo = CellGEO {
-                id: cell_id.clone(),
+            let zone = Zone {
+                id: zone_id.clone(),
                 region: ply,
                 center: pnt,
                 vertex_count: v_count - 1,
                 children: None,
                 neighbors: None,
             };
-            cells_geo.cells.push(cell_geo);
+            cells_geo.cells.push(zone);
 
             // reset
             raw_coords.clear();
@@ -217,7 +217,7 @@ pub fn parse_neighbors(data: &String, dggs_res_spec: &u8) -> Vec<IdArray> {
         .collect()
 }
 
-pub fn assign_field(cells_geo: &mut CellsGEO, data: Vec<IdArray>, field: &str) {
+pub fn assign_field(cells_geo: &mut Zones, data: Vec<IdArray>, field: &str) {
     for item in data {
         if let Some(ref id_str) = item.id {
             if let Some(cell) = cells_geo

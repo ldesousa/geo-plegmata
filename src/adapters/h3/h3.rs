@@ -12,28 +12,28 @@ use crate::ports::dggrs::DggrsPort;
 pub struct H3Impl;
 
 impl DggrsPort for H4Impl {
-    fn whole_earth(
+    fn zones_from_bbox(
         &self,
         dggs_type: String,
         dggs_res_spec: u8,
         densify: bool,
         bbox: Option<Vec<Vec<f64>>>,
-    ) -> CellsGEO {
-        // call H3 here and return CellsGEO
+    ) -> Zones {
+        // call H3 here and return Zones
     }
-    fn from_point(
+    fn zone_from_point(
         &self,
         dggs_type: String,
         dggs_res_spec: u8,
         point: Point,
         densify: bool,
-    ) -> CellsGEO {
+    ) -> Zones {
         // etc.
     }
-    fn coarse_cells(&self, ...) -> CellsGEO {
+    fn zones_from_parent(&self, ...) -> Zones {
         // ...
     }
-    fn single_zone(&self, ...) -> CellsGEO {
+    fn zone_from_id(&self, ...) -> Zones {
         // ...
     }
 }

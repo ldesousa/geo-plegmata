@@ -5,7 +5,7 @@ class DGGRS
 <<interface>> DGGRS
 DGGRS : identity()
 DGGRS : description()
-DGGRS : cell_id(lat, lon, ref_level)
+DGGRS : zone_id(lat, lon, ref_level)
 
 DGGRS <|.. ISEAG3H
 DGGRS <|.. IST3T

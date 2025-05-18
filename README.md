@@ -68,7 +68,7 @@ These assets define behaviour allowing data structures to presist. The method si
 How to use it
 -------------
 
-This library provides an interface to DGGRID (and potentinally other tools) to generate cells. The output of the three public functions is a `CellsGEO` struct with the cell ID and an vector of coordinates that describes the cell polygon using the [geo](https://github.com/georust/geo) primitive [Polygon](https://docs.rs/geo/latest/geo/geometry/struct.Polygon.html).
+This library provides an interface to DGGRID (and potentinally other tools) to generate cells. The output of the three public functions is a `Zones` struct with the cell ID and an vector of coordinates that describes the cell polygon using the [geo](https://github.com/georust/geo) primitive [Polygon](https://docs.rs/geo/latest/geo/geometry/struct.Polygon.html).
 
 ## Requirments
 
@@ -107,13 +107,13 @@ fn main() {
     ]);
 
     let pnt = Point::new(10.9, 4.9);
-    for (tool, dggs, cell_id) in configs {
+    for (tool, dggs, zone_id) in configs {
         println!("=== DGGS Type: {} ===", dggs);
 
         let generator = dggrs::get(&tool, &dggs);
 
         println!("Global");
-        let result = generator.whole_earth(2, false, None);
+        let result = generator.zones_from_bbox(2, false, None);
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,
@@ -121,7 +121,7 @@ fn main() {
         );
 
         println!("Global with Bbox");
-        let result = generator.whole_earth(2, false, bbox.clone());
+        let result = generator.zones_from_bbox(2, false, bbox.clone());
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,
@@ -129,23 +129,23 @@ fn main() {
         );
 
         println!("Point");
-        let result = generator.from_point(6, pnt, false);
+        let result = generator.zone_from_point(6, pnt, false);
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,
             result.cells.len()
         );
 
-        println!("Subzones of {}", cell_id);
-        let result = generator.coarse_cells(6, cell_id.clone(), false);
+        println!("Subzones of {}", zone_id);
+        let result = generator.zones_from_parent(6, zone_id.clone(), false);
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,
             result.cells.len()
         );
 
-        println!("Single Zone {}", cell_id.clone());
-        let result = generator.single_zone(cell_id.clone(), false);
+        println!("Single Zone {}", zone_id.clone());
+        let result = generator.zone_from_id(zone_id.clone(), false);
         println!(
             "{:?} \nGenerated {} cells",
             result.cells,

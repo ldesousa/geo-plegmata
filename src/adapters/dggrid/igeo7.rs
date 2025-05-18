@@ -9,7 +9,7 @@
 
 use crate::adapters::dggrid::common;
 use crate::adapters::dggrid::dggrid::DggridAdapter;
-use crate::models::common::CellsGEO;
+use crate::models::common::Zones;
 use crate::ports::dggrs::DggrsPort;
 use core::f64;
 use geo::geometry::Point;
@@ -42,12 +42,12 @@ impl Default for Igeo7Impl {
 }
 
 impl DggrsPort for Igeo7Impl {
-    fn whole_earth(
+    fn zones_from_bbox(
         &self,
         dggs_res_spec: u8,
         densify: bool,
         bbox: Option<Vec<Vec<f64>>>,
-    ) -> CellsGEO {
+    ) -> Zones {
         let (meta_path, aigen_path, children_path, neighbor_path, bbox_path, _input_path) =
             common::dggrid_setup(&self.adapter.workdir);
 
@@ -94,7 +94,7 @@ impl DggrsPort for Igeo7Impl {
         result
     }
 
-    fn from_point(&self, dggs_res_spec: u8, point: Point, densify: bool) -> CellsGEO {
+    fn zone_from_point(&self, dggs_res_spec: u8, point: Point, densify: bool) -> Zones {
         let (meta_path, aigen_path, children_path, neighbor_path, bbox_path, input_path) =
             common::dggrid_setup(&self.adapter.workdir);
 
@@ -148,13 +148,13 @@ impl DggrsPort for Igeo7Impl {
         let _ = fs::remove_file(&input_path);
         result
     }
-    fn coarse_cells(
+    fn zones_from_parent(
         &self,
         dggs_res_spec: u8,
         clip_cell_addresses: String, // ToDo: needs validation function
         // clip_cell_res: u8,
         densify: bool,
-    ) -> CellsGEO {
+    ) -> Zones {
         let (meta_path, aigen_path, children_path, neighbor_path, bbox_path, _input_path) =
             common::dggrid_setup(&self.adapter.workdir);
 
@@ -180,7 +180,7 @@ impl DggrsPort for Igeo7Impl {
 
         let clip_cell_address = &clip_cell_addresses[2..]; // strip first two characters. ToDo: can we get the res from the index itself?
 
-        let _ = writeln!(meta_file, "clip_subset_type COARSE_CELLS");
+        let _ = writeln!(meta_file, "clip_subset_type zones_from_parent");
         let _ = writeln!(meta_file, "clip_cell_res {:?}", clip_cell_res);
         let _ = writeln!(
             meta_file,
@@ -202,11 +202,11 @@ impl DggrsPort for Igeo7Impl {
         );
         result
     }
-    fn single_zone(
+    fn zone_from_id(
         &self,
         zone_id: String, // ToDo: needs validation function
         densify: bool,
-    ) -> CellsGEO {
+    ) -> Zones {
         let (meta_path, aigen_path, children_path, neighbor_path, bbox_path, input_path) =
             common::dggrid_setup(&self.adapter.workdir);
 

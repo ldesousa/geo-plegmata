@@ -11,7 +11,7 @@ use crate::models::dggrid::CellID;
 use geo::{Point, Polygon};
 
 #[derive(Debug)]
-pub struct CellGEO {
+pub struct Zone {
     pub id: CellID,
     pub region: Polygon,
     pub center: Point,
@@ -21,6 +21,6 @@ pub struct CellGEO {
 }
 
 #[derive(Debug)]
-pub struct CellsGEO {
-    pub cells: Vec<CellGEO>,
+pub struct Zones {
+    pub cells: Vec<Zone>,
 }
