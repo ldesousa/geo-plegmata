@@ -11,17 +11,12 @@ use crate::models::common::Zones;
 use geo::Point;
 // That is the port
 pub trait DggrsPort: Send + Sync {
-    fn zones_from_bbox(
-        &self,
-        dggs_res_spec: u8,
-        densify: bool,
-        bbox: Option<Vec<Vec<f64>>>,
-    ) -> Zones;
-    fn zone_from_point(&self, dggs_res_spec: u8, point: Point, densify: bool) -> Zones;
+    fn zones_from_bbox(&self, depth: u8, densify: bool, bbox: Option<Vec<Vec<f64>>>) -> Zones;
+    fn zone_from_point(&self, depth: u8, point: Point, densify: bool) -> Zones;
     fn zones_from_parent(
         &self,
-        dggs_res_spec: u8,
-        clip_cell_addresses: String,
+        depth: u8,
+        parent_zone_id: String,
         // clip_cell_res: u8,
         densify: bool,
     ) -> Zones;

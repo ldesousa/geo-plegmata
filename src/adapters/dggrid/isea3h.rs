@@ -42,18 +42,13 @@ impl Default for Isea3hImpl {
 }
 
 impl DggrsPort for Isea3hImpl {
-    fn zones_from_bbox(
-        &self,
-        dggs_res_spec: u8,
-        densify: bool,
-        bbox: Option<Vec<Vec<f64>>>,
-    ) -> Zones {
+    fn zones_from_bbox(&self, depth: u8, densify: bool, bbox: Option<Vec<Vec<f64>>>) -> Zones {
         let (meta_path, aigen_path, children_path, neighbor_path, bbox_path, _input_path) =
             common::dggrid_setup(&self.adapter.workdir);
 
         let _ = common::dggrid_metafile(
             &meta_path,
-            &dggs_res_spec,
+            &depth,
             &aigen_path.with_extension(""),
             &children_path.with_extension(""),
             &neighbor_path.with_extension(""),
@@ -82,8 +77,7 @@ impl DggrsPort for Isea3hImpl {
 
         common::print_file(meta_path.clone());
         common::dggrid_execute(&self.adapter.executable, &meta_path);
-        let result =
-            common::dggrid_parse(&aigen_path, &children_path, &neighbor_path, &dggs_res_spec);
+        let result = common::dggrid_parse(&aigen_path, &children_path, &neighbor_path, &depth);
         common::dggrid_cleanup(
             &meta_path,
             &aigen_path,
@@ -94,13 +88,13 @@ impl DggrsPort for Isea3hImpl {
         result
     }
 
-    fn zone_from_point(&self, dggs_res_spec: u8, point: Point, densify: bool) -> Zones {
+    fn zone_from_point(&self, depth: u8, point: Point, densify: bool) -> Zones {
         let (meta_path, aigen_path, children_path, neighbor_path, bbox_path, input_path) =
             common::dggrid_setup(&self.adapter.workdir);
 
         let _ = common::dggrid_metafile(
             &meta_path,
-            &dggs_res_spec,
+            &depth,
             &aigen_path.with_extension(""),
             &children_path.with_extension(""),
             &neighbor_path.with_extension(""),
@@ -136,8 +130,7 @@ impl DggrsPort for Isea3hImpl {
 
         common::print_file(meta_path.clone());
         common::dggrid_execute(&self.adapter.executable, &meta_path);
-        let result =
-            common::dggrid_parse(&aigen_path, &children_path, &neighbor_path, &dggs_res_spec);
+        let result = common::dggrid_parse(&aigen_path, &children_path, &neighbor_path, &depth);
         common::dggrid_cleanup(
             &meta_path,
             &aigen_path,
@@ -150,8 +143,8 @@ impl DggrsPort for Isea3hImpl {
     }
     fn zones_from_parent(
         &self,
-        dggs_res_spec: u8,
-        clip_cell_addresses: String, // ToDo: needs validation function
+        depth: u8,
+        parent_zone_id: String, // ToDo: needs validation function
         // clip_cell_res: u8,
         densify: bool,
     ) -> Zones {
@@ -160,7 +153,7 @@ impl DggrsPort for Isea3hImpl {
 
         let _ = common::dggrid_metafile(
             &meta_path,
-            &dggs_res_spec,
+            &depth,
             &aigen_path.with_extension(""),
             &children_path.with_extension(""),
             &neighbor_path.with_extension(""),
@@ -176,9 +169,9 @@ impl DggrsPort for Isea3hImpl {
             .open(&meta_path)
             .expect("cannot open file");
 
-        let clip_cell_res = extract_res_from_cellid(&clip_cell_addresses, "ISEA3H").unwrap();
+        let clip_cell_res = extract_res_from_cellid(&parent_zone_id, "ISEA3H").unwrap();
 
-        let clip_cell_address = &clip_cell_addresses[2..]; // strip first two characters. ToDo: can we get the res from the index itself?
+        let clip_cell_address = &parent_zone_id[2..]; // strip first two characters. ToDo: can we get the res from the index itself?
 
         let _ = writeln!(meta_file, "clip_subset_type zones_from_parent");
         let _ = writeln!(meta_file, "clip_cell_res {:?}", clip_cell_res);
@@ -191,8 +184,7 @@ impl DggrsPort for Isea3hImpl {
         let _ = writeln!(meta_file, "input_address_type Z3");
         common::print_file(meta_path.clone());
         common::dggrid_execute(&self.adapter.executable, &meta_path);
-        let result =
-            common::dggrid_parse(&aigen_path, &children_path, &neighbor_path, &dggs_res_spec);
+        let result = common::dggrid_parse(&aigen_path, &children_path, &neighbor_path, &depth);
         common::dggrid_cleanup(
             &meta_path,
             &aigen_path,
@@ -211,10 +203,10 @@ impl DggrsPort for Isea3hImpl {
             common::dggrid_setup(&self.adapter.workdir);
 
         let clip_cell_res = extract_res_from_cellid(&zone_id, "ISEA3H").unwrap();
-        let dggs_res_spec = clip_cell_res;
+        let depth = clip_cell_res;
         let _ = common::dggrid_metafile(
             &meta_path,
-            &dggs_res_spec,
+            &depth,
             &aigen_path.with_extension(""),
             &children_path.with_extension(""),
             &neighbor_path.with_extension(""),
@@ -251,8 +243,7 @@ impl DggrsPort for Isea3hImpl {
         let _ = writeln!(meta_file, "input_address_type Z3");
         common::print_file(meta_path.clone());
         common::dggrid_execute(&self.adapter.executable, &meta_path);
-        let result =
-            common::dggrid_parse(&aigen_path, &children_path, &neighbor_path, &dggs_res_spec);
+        let result = common::dggrid_parse(&aigen_path, &children_path, &neighbor_path, &depth);
         common::dggrid_cleanup(
             &meta_path,
             &aigen_path,
@@ -291,12 +282,12 @@ pub fn extract_res_from_cellid(id: &str, dggs_type: &str) -> Result<u8, String> 
 /// Extract resolution from ISEA3H ID (Z3)
 pub fn extract_res_from_z3(id: &str) -> Result<u8, String> {
     if id.len() < 2 {
-        return Err("CellID too short to extract resolution".to_string());
+        return Err("ZoneID too short to extract resolution".to_string());
     }
 
     id[..2]
         .parse::<u8>()
-        .map_err(|_| "Invalid resolution prefix in CellID".to_string())
+        .map_err(|_| "Invalid resolution prefix in ZoneID".to_string())
 }
 /// Extract resolution from IGEO7 ID (Z7)
 pub fn extract_res_from_z7(id: &str) -> Result<u8, String> {
@@ -304,14 +295,14 @@ pub fn extract_res_from_z7(id: &str) -> Result<u8, String> {
         1 => Ok(0),
         2 => Ok(1),
         _ => {
-            let num = u64::from_str_radix(id, 16).map_err(|_| "Invalid hex CellID".to_string())?;
+            let num = u64::from_str_radix(id, 16).map_err(|_| "Invalid hex ZoneID".to_string())?;
 
             let shifted = num << 4;
 
             let lz = shifted.leading_zeros();
 
             if lz > 63 {
-                return Err("Invalid IGEO7 CellID: No resolution mask found".to_string());
+                return Err("Invalid IGEO7 ZoneID: No resolution mask found".to_string());
             }
 
             let res = 2 + lz;

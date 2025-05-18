@@ -15,19 +15,13 @@ impl DggrsPort for H4Impl {
     fn zones_from_bbox(
         &self,
         dggs_type: String,
-        dggs_res_spec: u8,
+        depth: u8,
         densify: bool,
         bbox: Option<Vec<Vec<f64>>>,
     ) -> Zones {
         // call H3 here and return Zones
     }
-    fn zone_from_point(
-        &self,
-        dggs_type: String,
-        dggs_res_spec: u8,
-        point: Point,
-        densify: bool,
-    ) -> Zones {
+    fn zone_from_point(&self, dggs_type: String, depth: u8, point: Point, densify: bool) -> Zones {
         // etc.
     }
     fn zones_from_parent(&self, ...) -> Zones {

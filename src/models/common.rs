@@ -7,12 +7,12 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::models::dggrid::CellID;
+use crate::models::dggrid::ZoneID;
 use geo::{Point, Polygon};
 
 #[derive(Debug)]
 pub struct Zone {
-    pub id: CellID,
+    pub id: ZoneID,
     pub region: Polygon,
     pub center: Point,
     pub vertex_count: u32,
@@ -22,5 +22,5 @@ pub struct Zone {
 
 #[derive(Debug)]
 pub struct Zones {
-    pub cells: Vec<Zone>,
+    pub zones: Vec<Zone>,
 }

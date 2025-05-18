@@ -8,8 +8,8 @@
 // except according to those terms.
 
 use crate::models::common::{Zone, Zones};
-use crate::models::dggrid::CellID;
 use crate::models::dggrid::IdArray;
+use crate::models::dggrid::ZoneID;
 use core::f64;
 use geo::geometry::{LineString, Point, Polygon};
 use rand::distributions::{Alphanumeric, DistString};
@@ -42,7 +42,7 @@ pub fn dggrid_setup(workdir: &PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, P
 
 pub fn dggrid_metafile(
     metafile: &PathBuf,
-    dggs_res_spec: &u8,
+    depth: &u8,
     cell_output_file_name: &PathBuf,
     children_output_file_name: &PathBuf,
     neighbor_output_file_name: &PathBuf,
@@ -55,7 +55,7 @@ pub fn dggrid_metafile(
     writeln!(file, "unwrap_points FALSE")?;
     writeln!(file, "output_cell_label_type OUTPUT_ADDRESS_TYPE")?;
     writeln!(file, "precision 9")?;
-    writeln!(file, "dggs_res_spec {}", dggs_res_spec)?;
+    writeln!(file, "dggs_res_spec {}", depth)?;
 
     writeln!(
         file,
@@ -90,23 +90,23 @@ pub fn dggrid_parse(
     aigen_path: &PathBuf,
     children_path: &PathBuf,
     neighbor_path: &PathBuf,
-    dggs_res_spec: &u8,
+    depth: &u8,
 ) -> Zones {
     let aigen_data = read_file(&aigen_path);
-    let mut result = parse_aigen(&aigen_data, &dggs_res_spec);
+    let mut result = parse_aigen(&aigen_data, &depth);
     let children_data = read_file(&children_path);
-    let children = parse_children(&children_data, &dggs_res_spec);
+    let children = parse_children(&children_data, &depth);
     assign_field(&mut result, children, "children");
 
     let neighbor_data = read_file(&neighbor_path);
-    let neighbors = parse_neighbors(&neighbor_data, &dggs_res_spec);
+    let neighbors = parse_neighbors(&neighbor_data, &depth);
     assign_field(&mut result, neighbors, "neighbors");
     result
 }
 
-pub fn parse_aigen(data: &String, dggs_res_spec: &u8) -> Zones {
-    let mut zone_id = CellID::default();
-    let mut cells_geo = Zones { cells: Vec::new() };
+pub fn parse_aigen(data: &String, depth: &u8) -> Zones {
+    let mut zone_id = ZoneID::default();
+    let mut zones = Zones { zones: Vec::new() };
 
     let mut raw_coords: Vec<(f64, f64)> = vec![];
     let mut ply: Polygon;
@@ -121,9 +121,9 @@ pub fn parse_aigen(data: &String, dggs_res_spec: &u8) -> Zones {
         // second two are the center point
 
         if line_parts.len() == 3 {
-            // For ISEA3H prepend zero-padded dggs_res_spec to the ID
-            let id_str = format!("{:02}{}", dggs_res_spec, line_parts[0]);
-            zone_id = CellID::new(&id_str).expect("Cannot accept this id");
+            // For ISEA3H prepend zero-padded depth to the ID
+            let id_str = format!("{:02}{}", depth, line_parts[0]);
+            zone_id = ZoneID::new(&id_str).expect("Cannot accept this id");
             pnt = Point::new(
                 line_parts[1]
                     .parse::<f64>()
@@ -155,14 +155,14 @@ pub fn parse_aigen(data: &String, dggs_res_spec: &u8) -> Zones {
                 children: None,
                 neighbors: None,
             };
-            cells_geo.cells.push(zone);
+            zones.zones.push(zone);
 
             // reset
             raw_coords.clear();
             v_count = 0;
         }
     }
-    cells_geo
+    zones
 }
 pub fn dggrid_cleanup(
     meta_path: &PathBuf,
@@ -178,7 +178,7 @@ pub fn dggrid_cleanup(
     let _ = fs::remove_file(bbox_path);
 }
 
-pub fn parse_children(data: &String, dggs_res_spec: &u8) -> Vec<IdArray> {
+pub fn parse_children(data: &String, depth: &u8) -> Vec<IdArray> {
     data.lines()
         .filter_map(|line| {
             let parts: Vec<&str> = line.split_whitespace().collect();
@@ -186,18 +186,18 @@ pub fn parse_children(data: &String, dggs_res_spec: &u8) -> Vec<IdArray> {
                 return None;
             }
 
-            let id = Some(format!("{:02}{}", dggs_res_spec, parts[0]));
+            let id = Some(format!("{:02}{}", depth, parts[0]));
             let arr = parts
                 .iter()
                 .skip(1)
-                .map(|s| format!("{:02}{}", dggs_res_spec + 1, s))
+                .map(|s| format!("{:02}{}", depth + 1, s))
                 .collect();
 
             Some(IdArray { id, arr: Some(arr) })
         })
         .collect()
 }
-pub fn parse_neighbors(data: &String, dggs_res_spec: &u8) -> Vec<IdArray> {
+pub fn parse_neighbors(data: &String, depth: &u8) -> Vec<IdArray> {
     data.lines()
         .filter_map(|line| {
             let parts: Vec<&str> = line.split_whitespace().collect();
@@ -205,11 +205,11 @@ pub fn parse_neighbors(data: &String, dggs_res_spec: &u8) -> Vec<IdArray> {
                 return None;
             }
 
-            let id = Some(format!("{:02}{}", dggs_res_spec, parts[0]));
+            let id = Some(format!("{:02}{}", depth, parts[0]));
             let arr = parts
                 .iter()
                 .skip(1)
-                .map(|s| format!("{:02}{}", dggs_res_spec, s))
+                .map(|s| format!("{:02}{}", depth, s))
                 .collect();
 
             Some(IdArray { id, arr: Some(arr) })
@@ -217,14 +217,10 @@ pub fn parse_neighbors(data: &String, dggs_res_spec: &u8) -> Vec<IdArray> {
         .collect()
 }
 
-pub fn assign_field(cells_geo: &mut Zones, data: Vec<IdArray>, field: &str) {
+pub fn assign_field(zones: &mut Zones, data: Vec<IdArray>, field: &str) {
     for item in data {
         if let Some(ref id_str) = item.id {
-            if let Some(cell) = cells_geo
-                .cells
-                .iter_mut()
-                .find(|c| c.id.to_string() == *id_str)
-            {
+            if let Some(cell) = zones.zones.iter_mut().find(|c| c.id.to_string() == *id_str) {
                 match field {
                     "children" => cell.children = item.arr.clone(),
                     "neighbors" => cell.neighbors = item.arr.clone(),

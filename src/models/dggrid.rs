@@ -15,27 +15,27 @@ pub struct PointOld {
     pub lat: f64,
 }
 #[derive(Debug, Clone)]
-pub struct CellID {
+pub struct ZoneID {
     pub id: String,
 }
 
 #[derive(Debug)]
-pub struct CellCoord {
+pub struct ZoneCoord {
     pub lon: f64,
     pub lat: f64,
 }
 #[derive(Debug)]
-pub struct CellGeom {
-    pub geom: Vec<CellCoord>,
+pub struct ZoneGeom {
+    pub geom: Vec<ZoneCoord>,
 }
 #[derive(Debug)]
-pub struct Cell {
-    pub id: CellID,
-    pub geom: CellGeom,
+pub struct Zone {
+    pub id: ZoneID,
+    pub geom: ZoneGeom,
 }
 #[derive(Debug)]
-pub struct Cells {
-    pub cells: Vec<Cell>,
+pub struct Zones {
+    pub zones: Vec<Zone>,
 }
 #[derive(Debug)]
 pub struct IdArray {
@@ -43,37 +43,37 @@ pub struct IdArray {
     pub arr: Option<Vec<String>>,
 }
 
-impl CellID {
+impl ZoneID {
     pub fn new(id: &str) -> Result<Self, String> {
         if (id.len() == 16 || id.len() == 18) && id.chars().all(|c| c.is_ascii_alphanumeric()) {
-            Ok(CellID { id: id.to_string() })
+            Ok(ZoneID { id: id.to_string() })
         } else {
             Err("ID must be exactly 16 or 18 alphanumeric characters.".to_string())
         }
     }
 }
 
-impl Default for CellID {
+impl Default for ZoneID {
     fn default() -> Self {
-        CellID {
+        ZoneID {
             id: "0000000000000000".to_string(),
         } // Some valid default ID
     }
 }
 
-impl Default for CellGeom {
+impl Default for ZoneGeom {
     fn default() -> Self {
-        CellGeom { geom: Vec::new() }
+        ZoneGeom { geom: Vec::new() }
     }
 }
 
-impl fmt::Display for CellID {
+impl fmt::Display for ZoneID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.id)
     }
 }
 
-impl fmt::Display for CellCoord {
+impl fmt::Display for ZoneCoord {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Longitude: {:.6}, Latitude: {:.6}", self.lon, self.lat)
     }

@@ -35,7 +35,7 @@ DGGRS
 
 A library or programme implementing a Discrete Global Grid Reference System offers the basic funcionalities to locate any position on the Earth's surface with a global grid. It translates latitude and longitude coordinates into grid cell identifiers and grid cell topologies. 
 
-Kevin Sahr first observed the capacity of a DGGS as a geo-spatial reference system in the work titled "[Location coding on icosahedral aperture 3 hexagon discrete global grids](https://doi.org/10.1016/j.compenvurbsys.2007.11.005)". By complementing the topology of a DGGS with a function mapping cells to unique identifiers, a DGGS is able to locate any location on the Earth's surface, at any desired spatial resolution.
+Kevin Sahr first observed the capacity of a DGGS as a geo-spatial reference system in the work titled "[Location coding on icosahedral aperture 3 hexagon discrete global grids](https://doi.org/10.1016/j.compenvurbsys.2007.11.005)". By complementing the topology of a DGGS with a function mapping zones to unique identifiers, a DGGS is able to locate any location on the Earth's surface, at any desired spatial resolution.
 
 The DGGRS interface is meant as the connection point to existing libraries, in particular DGGRID, but also H3, S2 and more.
 
@@ -52,7 +52,7 @@ A Coverage may encompass the complete surface of the Earth, or just a segment th
 
 Coverages are often organised into blocks, sub-segments of its extent that facilitate their management in memory and encoding. The OGC DGGS API defines the concept of *Zone*, that largely overlaps with that of block.
 
-In its meta-data the Coverage must identify the DGGRS resolution of its cells, as well as the resolution of is blocks (or zones).
+In its meta-data the Coverage must identify the DGGRS resolution of its zones, as well as the resolution of is blocks (or zones).
 
 ### Vector
 
@@ -68,7 +68,7 @@ These assets define behaviour allowing data structures to presist. The method si
 How to use it
 -------------
 
-This library provides an interface to DGGRID (and potentinally other tools) to generate cells. The output of the three public functions is a `Zones` struct with the cell ID and an vector of coordinates that describes the cell polygon using the [geo](https://github.com/georust/geo) primitive [Polygon](https://docs.rs/geo/latest/geo/geometry/struct.Polygon.html).
+This library provides an interface to DGGRID (and potentinally other tools) to generate zones. The output of the three public functions is a `Zones` struct with the cell ID and an vector of coordinates that describes the cell polygon using the [geo](https://github.com/georust/geo) primitive [Polygon](https://docs.rs/geo/latest/geo/geometry/struct.Polygon.html).
 
 ## Requirments
 
@@ -115,44 +115,44 @@ fn main() {
         println!("Global");
         let result = generator.zones_from_bbox(2, false, None);
         println!(
-            "{:?} \nGenerated {} cells",
-            result.cells,
-            result.cells.len()
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
         );
 
         println!("Global with Bbox");
         let result = generator.zones_from_bbox(2, false, bbox.clone());
         println!(
-            "{:?} \nGenerated {} cells",
-            result.cells,
-            result.cells.len()
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
         );
 
         println!("Point");
         let result = generator.zone_from_point(6, pnt, false);
         println!(
-            "{:?} \nGenerated {} cells",
-            result.cells,
-            result.cells.len()
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
         );
 
         println!("Subzones of {}", zone_id);
         let result = generator.zones_from_parent(6, zone_id.clone(), false);
         println!(
-            "{:?} \nGenerated {} cells",
-            result.cells,
-            result.cells.len()
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
         );
 
         println!("Single Zone {}", zone_id.clone());
         let result = generator.zone_from_id(zone_id.clone(), false);
         println!(
-            "{:?} \nGenerated {} cells",
-            result.cells,
-            result.cells.len()
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
         );
     }
 }
 ````
 
-Instead of printing out the length of `grid.cells.len()` you can also print out the struct itself.
+Instead of printing out the length of `result.zones.len()` you can also print out the struct itself.
