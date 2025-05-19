@@ -7,9 +7,7 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::models::common::{Zone, Zones};
-use crate::models::dggrid::IdArray;
-use crate::models::dggrid::ZoneID;
+use crate::models::common::{Zone, ZoneID, Zones};
 use core::f64;
 use geo::geometry::{LineString, Point, Polygon};
 use rand::distributions::{Alphanumeric, DistString};
@@ -21,6 +19,12 @@ use std::process::Command;
 use tracing::debug;
 
 pub const DENSIFICATION: u8 = 50; // DGGRID option
+
+#[derive(Debug)]
+pub struct IdArray {
+    pub id: Option<String>,
+    pub arr: Option<Vec<String>>,
+}
 
 pub fn dggrid_setup(workdir: &PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
     let code = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);

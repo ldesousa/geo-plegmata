@@ -7,8 +7,8 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::models::dggrid::ZoneID;
 use geo::{Point, Polygon};
+use std::fmt;
 
 #[derive(Debug)]
 pub struct Zone {
@@ -23,4 +23,33 @@ pub struct Zone {
 #[derive(Debug)]
 pub struct Zones {
     pub zones: Vec<Zone>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ZoneID {
+    pub id: String,
+}
+
+impl ZoneID {
+    pub fn new(id: &str) -> Result<Self, String> {
+        if (id.len() == 16 || id.len() == 18) && id.chars().all(|c| c.is_ascii_alphanumeric()) {
+            Ok(ZoneID { id: id.to_string() })
+        } else {
+            Err("ID must be exactly 16 or 18 alphanumeric characters.".to_string())
+        }
+    }
+}
+
+impl Default for ZoneID {
+    fn default() -> Self {
+        ZoneID {
+            id: "0000000000000000".to_string(),
+        } // Some valid default ID
+    }
+}
+
+impl fmt::Display for ZoneID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.id)
+    }
 }
