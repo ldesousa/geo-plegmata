@@ -21,16 +21,10 @@ pub trait Polyhedron {
         vector2: Vector3D,
         vector3: Vector3D,
     ) -> Vector3D;
-    fn is_point_in_triangle(&self, point: Vector3D, triangle_3d: Vec<Vector3D>) -> bool;
+    fn is_point_in_triangle(&self, point: Vector3D, triangle: Vec<Vector3D>) -> bool;
     fn angle_between_unit(&self, u: Vector3D, v: Vector3D) -> f64;
 }
 
-#[derive(Default, Debug)]
-pub struct UnitVectors {
-    pub a: [f64; 3],
-    pub b: [f64; 3],
-    pub c: [f64; 3],
-}
 #[derive(Default, Debug)]
 pub struct ArcLengths {
     pub ab: f64,
@@ -39,10 +33,4 @@ pub struct ArcLengths {
     pub ap: f64,
     pub bp: f64,
     pub cp: f64,
-}
-#[derive(Default, Debug)]
-pub struct Vertexes {
-    pub a: [f64; 2],
-    pub b: [f64; 2],
-    pub c: [f64; 2],
 }

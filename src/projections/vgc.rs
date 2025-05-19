@@ -1,3 +1,12 @@
+// Copyright 2025 contributors to the GeoPlegmata project.
+// Originally authored by João Manuel (GeoInsight GmbH, joao.manuel@geoinsight.ai)
+//
+// Licenced under the Apache Licence, Version 2.0 <LICENCE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENCE-MIT or http://opensource.org/licenses/MIT>, at your
+// discretion. This file may not be copied, modified, or distributed
+// except according to those terms
+
 use std::f64::consts::{E, PI};
 
 use crate::{
@@ -10,17 +19,15 @@ use crate::{
         polyhedron::{ArcLengths, Polyhedron},
         projection::Projection,
     },
-    utils::math::{cos, pow, sin, tan, to_rad},
 };
 
 use super::constants::COEF_GEOD_TO_AUTH_LAT;
-
-// use super::vgcp::Vgcp;
 
 /// Implementation for Vertex Great Circle projection (or van Leeuwen Great Circle projection).
 /// vgc - Vertex Great Circle projection.
 /// Based on the slice and dice approach from this article:
 /// http://dx.doi.org/10.1559/152304006779500687
+/// A good chunk of this code is based on the DGGAL software: https://github.com/ecere/dggal
 pub struct Vgc;
 
 impl Projection for Vgc {
@@ -34,26 +41,29 @@ impl Projection for Vgc {
         let polyhedron = polyhedron.unwrap();
 
         // Need the coeficcients to convert from geodetic to authalic
-        let coef_fourier_geod_to_auth = Self::compute_fourier_coefficients(COEF_GEOD_TO_AUTH_LAT);
+        let coef_fourier_geod_to_auth = Self::fourier_coefficients(COEF_GEOD_TO_AUTH_LAT);
 
         // get 3d unit vectors of the icosahedron
         let ico_vectors = polyhedron.unit_vectors();
         let triangles_ids = polyhedron.indices();
 
         // ABC
-        let angle_beta: f64 = to_rad(36.0);
+        let angle_beta: f64 = 36.0f64.to_radians();
         // BCA
-        let angle_gamma: f64 = to_rad(60.0);
+        let angle_gamma: f64 = 60.0f64.to_radians();
         // // BAC
         // let angle_alpha: f64 = PI / 2.0;
 
         let v2d = layout.vertices();
 
         for position in positions {
-            let lon = position.lon;
-            let lat = Self::lat_geodetic_to_authalic(position.lat, &coef_fourier_geod_to_auth);
+            let lon = position.lon.to_radians();
+            let lat = Self::lat_geodetic_to_authalic(
+                position.lat.to_radians(),
+                &coef_fourier_geod_to_auth,
+            );
             // Calculate 3d unit vectors for point P
-            let vector_3d = Vector3D::from_array(Self::to_3d(to_rad(lat), to_rad(lon)));
+            let vector_3d = Vector3D::from_array(Self::to_3d(lat, lon));
 
             // starting from here you need:
             // - the 3d point that you want to project
@@ -77,23 +87,24 @@ impl Projection for Vgc {
                         polyhedron.triangle_arc_lengths(triangle_3d, vector_3d);
 
                     // angle ρ
-                    let rho: f64 = f64::acos(cos(ap) - cos(ab) * cos(bp)) / (sin(ab) * sin(bp));
+                    let rho: f64 =
+                        f64::acos(ap.cos() - ab.cos() * bp.cos()) / (ab.sin() * bp.sin());
 
                     // /// 1. Calculate delta (δ)
-                    let delta = f64::acos(f64::sin(rho) * f64::cos(ab));
+                    let delta = f64::acos(rho.sin() * ab.cos());
 
                     // /// 2. Calculate u
                     let uv = (angle_beta + angle_gamma - rho - delta)
                         / (angle_beta + angle_gamma - PI / 2.0);
 
                     let cos_xp_y;
-                    if rho <= pow(E, -9) {
-                        cos_xp_y = cos(ab);
+                    if rho <= E.powi(-9) {
+                        cos_xp_y = ab.cos();
                     } else {
-                        cos_xp_y = 1.0 / (tan(rho) * tan(delta))
+                        cos_xp_y = 1.0 / (rho.tan() * delta.tan())
                     }
 
-                    let xy = f64::sqrt((1.0 - cos(bp)) / (1.0 - cos_xp_y));
+                    let xy = f64::sqrt((1.0 - bp.cos()) / (1.0 - cos_xp_y));
 
                     // triangle vertexes
                     let (p0, p1, p2) = (&triangle_2d[0], &triangle_2d[1], &triangle_2d[2]);
@@ -104,7 +115,7 @@ impl Projection for Vgc {
 
                     // Between D and B it gives point P
                     let p_x = pd_x + (pd_x - p1.x) * xy;
-                    let p_y = pd_x + (pd_x - p1.y) * xy;
+                    let p_y = pd_y + (pd_x - p1.y) * xy;
 
                     out.push(Position2D { x: p_x, y: p_y });
                 }
@@ -120,7 +131,10 @@ impl Projection for Vgc {
 
 #[cfg(test)]
 mod tests {
-    use crate::{layout::rhombic5x6::Rhombic5x6, models::common::PositionGeo, polyhedron::icosahedron::Icosahedron, traits::projection::Projection};
+    use crate::{
+        layout::rhombic5x6::Rhombic5x6, models::common::PositionGeo,
+        polyhedron::icosahedron::Icosahedron, traits::projection::Projection,
+    };
 
     use super::Vgc;
 
@@ -132,6 +146,5 @@ mod tests {
         let projection = Vgc;
 
         let result = projection.forward(vec![position], Some(&Icosahedron {}), &Rhombic5x6 {});
-
     }
 }
