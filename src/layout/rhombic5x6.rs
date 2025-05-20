@@ -10,6 +10,7 @@
 use crate::models::common::Position2D;
 use crate::traits::layout::Layout;
 
+/// The triangle configuration is based on the DGGAL software implementation of the rhombic configuration: https://github.com/ecere/dggal
 #[derive(Default, Debug)]
 pub struct Rhombic5x6 {}
 

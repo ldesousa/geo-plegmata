@@ -17,14 +17,12 @@ use std::f64::consts::PI;
 
 use crate::traits::polyhedron::ArcLengths;
 
-/// (1 + sqrt(5)) / 2
-pub const GOLDEN_RATIO: f64 = 1.618;
-
 pub const FACES: u8 = 20;
 
 pub const ORIENTATION_LAT: f64 = 31.7174744114611;
 pub const ORIENTATION_LON: f64 = 11.20;
 
+/// A chunk of the following is based on the DGGAL software implementation of the icosahedron: https://github.com/ecere/dggal
 #[derive(Default, Debug)]
 pub struct Icosahedron {}
 
@@ -45,10 +43,10 @@ impl Polyhedron for Icosahedron {
         let tc = t.cos();
         let bc = (-t).cos();
 
-        // normalized radius
+        // Normalized radius
         let r = 1.0;
 
-        // area of the icosahedron triangular face
+        // Area of the icosahedron triangular face
         let s = 2.0 * PI / 5.0;
 
         let mut vertices = vec![
@@ -117,14 +115,11 @@ impl Polyhedron for Icosahedron {
         let (v1, v2, v3) = (face_vectors[0], face_vectors[1], face_vectors[2]);
         let mut vector_center = self.face_center(v1, v2, v3);
 
-        // let mut p_mid = Position2D::mid(face_vertices[1], face_vertices[2]);
-        // let mut v_mid = Vector3D::mid(face_vectors[1], face_vectors[2]);
         let (mut v_mid, p_mid, corner): (Vector3D, Position2D, (Vector3D, Position2D)) =
             if self.is_point_in_triangle(vector, vec![vector_center, v2, v3]) {
                 let p_mid = Position2D::mid(p2.clone(), p3.clone());
                 let v_mid = Vector3D::mid(v2, v3);
                 if self.is_point_in_triangle(vector, vec![vector_center, v_mid, v3]) {
-                    // ((p_mid, p3, point_center),(v_mid,v3,point_center))
                     (v_mid, p_mid, (v3, p3))
                 } else {
                     (v_mid, p_mid, (v2, p2))
@@ -156,7 +151,7 @@ impl Polyhedron for Icosahedron {
         )
     }
 
-    // to 90 degrees right triangle
+    /// Procedure to calculate arc lengths of the `triangle` with a point P (`vector` arc). To 90 degrees right triangle. 
     /// 1. Compute center 3D vector of face
     /// 2. Compute center 2D point of face
     /// 3. Check which sub-triangle (out of 3) v falls into:
@@ -167,7 +162,6 @@ impl Polyhedron for Icosahedron {
     /// 5. Test which sub-sub-triangle v is in (with vCenter + vMid + corner)
     /// 6. Set the triangle vertex indices: [va, vb, vc] = [0, 1, 2]
     /// 7. Normalize vCenter, vMid
-    /// 8. Call forwardPointInSDTTriangle(v, ... -> out)
     fn triangle_arc_lengths(&self, triangle: [Vector3D; 3], vector: Vector3D) -> ArcLengths {
         // Vertex indices are [0, 1, 2]
         // Vertices for the 3D triangle that we want (v_mid: B, corner.0: A, v_center: C)

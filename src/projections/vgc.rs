@@ -24,10 +24,10 @@ use crate::{
 use super::constants::COEF_GEOD_TO_AUTH_LAT;
 
 /// Implementation for Vertex Great Circle projection (or van Leeuwen Great Circle projection).
-/// vgc - Vertex Great Circle projection.
+/// vgc - Vertex-oriented Great Circle projection.
 /// Based on the slice and dice approach from this article:
 /// http://dx.doi.org/10.1559/152304006779500687
-/// A good chunk of this code is based on the DGGAL software: https://github.com/ecere/dggal
+/// A chunk of the following is based on the DGGAL software implementation of the slice and dice projection: https://github.com/ecere/dggal
 pub struct Vgc;
 
 impl Projection for Vgc {
@@ -51,7 +51,7 @@ impl Projection for Vgc {
         let angle_beta: f64 = 36.0f64.to_radians();
         // BCA
         let angle_gamma: f64 = 60.0f64.to_radians();
-        // // BAC
+        // BAC
         // let angle_alpha: f64 = PI / 2.0;
 
         let v2d = layout.vertices();
@@ -65,7 +65,7 @@ impl Projection for Vgc {
             // Calculate 3d unit vectors for point P
             let vector_3d = Vector3D::from_array(Self::to_3d(lat, lon));
 
-            // starting from here you need:
+            // starting from here, you need:
             // - the 3d point that you want to project
             // - the 3d vertexes of the icosahedron
             // - the 2d vertexes of the config 5x6
@@ -90,10 +90,10 @@ impl Projection for Vgc {
                     let rho: f64 =
                         f64::acos(ap.cos() - ab.cos() * bp.cos()) / (ab.sin() * bp.sin());
 
-                    // /// 1. Calculate delta (δ)
+                    // 1. Calculate delta (δ)
                     let delta = f64::acos(rho.sin() * ab.cos());
 
-                    // /// 2. Calculate u
+                    // 2. Calculate u
                     let uv = (angle_beta + angle_gamma - rho - delta)
                         / (angle_beta + angle_gamma - PI / 2.0);
 
@@ -106,7 +106,7 @@ impl Projection for Vgc {
 
                     let xy = f64::sqrt((1.0 - bp.cos()) / (1.0 - cos_xp_y));
 
-                    // triangle vertexes
+                    // Triangle vertexes
                     let (p0, p1, p2) = (&triangle_2d[0], &triangle_2d[1], &triangle_2d[2]);
 
                     // Between A e o C it gives point D

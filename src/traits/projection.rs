@@ -95,7 +95,7 @@ pub trait Projection {
             let t = 2.0 * x * u0 - u1 + coef[k];
             u1 = u0;
             u0 = t;
-        } // (33)
+        } // Equation (33) (Karney, 2023)
 
         latitude + 2.0 * u0 * sin_zeta * cos_zeta
     }
