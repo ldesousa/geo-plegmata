@@ -7,3 +7,8 @@
 // except according to those terms.
 
 pub mod types;
+pub mod models;
+pub mod traits;
+pub mod projections;
+pub mod polyhedron;
+pub mod layout;
