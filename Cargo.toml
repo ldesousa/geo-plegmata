@@ -9,6 +9,7 @@ readme = "README.md"
 geo = "0.29.3"
 rand = "0.8.5"
 tracing = "0.1.41"
+h3o = "0.8.0"
 
 [dev-dependencies]
 
