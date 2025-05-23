@@ -35,7 +35,7 @@ DGGRS
 
 A library or programme implementing a Discrete Global Grid Reference System offers the basic funcionalities to locate any position on the Earth's surface with a global grid. It translates latitude and longitude coordinates into grid cell identifiers and grid cell topologies. 
 
-Kevin Sahr first observed the capacity of a DGGS as a geo-spatial reference system in the work titled "[Location coding on icosahedral aperture 3 hexagon discrete global grids](https://doi.org/10.1016/j.compenvurbsys.2007.11.005)". By complementing the topology of a DGGS with a function mapping cells to unique identifiers, a DGGS is able to locate any location on the Earth's surface, at any desired spatial resolution.
+Kevin Sahr first observed the capacity of a DGGS as a geo-spatial reference system in the work titled "[Location coding on icosahedral aperture 3 hexagon discrete global grids](https://doi.org/10.1016/j.compenvurbsys.2007.11.005)". By complementing the topology of a DGGS with a function mapping zones to unique identifiers, a DGGS is able to locate any location on the Earth's surface, at any desired spatial resolution.
 
 The DGGRS interface is meant as the connection point to existing libraries, in particular DGGRID, but also H3, S2 and more.
 
@@ -52,7 +52,7 @@ A Coverage may encompass the complete surface of the Earth, or just a segment th
 
 Coverages are often organised into blocks, sub-segments of its extent that facilitate their management in memory and encoding. The OGC DGGS API defines the concept of *Zone*, that largely overlaps with that of block.
 
-In its meta-data the Coverage must identify the DGGRS resolution of its cells, as well as the resolution of is blocks (or zones).
+In its meta-data the Coverage must identify the DGGRS resolution of its zones, as well as the resolution of is blocks (or zones).
 
 ### Vector
 
@@ -64,3 +64,95 @@ Encoding/Abstraction
 --------------------
 
 These assets define behaviour allowing data structures to presist. The method signatures include the encoding and abstraction of meta-data and data segments. The meta-data must clearly identify the underlying DGGRS and if necessary data types. Data access is concieved in segmented form, considering the likely case of large datasets, either spaning large areas of the globe or expressed at a high spatial resolution.  
+
+How to use it
+-------------
+
+This library provides an interface to DGGRID (and potentinally other tools) to generate zones. The output of the three public functions is a `Zones` struct with the cell ID and an vector of coordinates that describes the cell polygon using the [geo](https://github.com/georust/geo) primitive [Polygon](https://docs.rs/geo/latest/geo/geometry/struct.Polygon.html).
+
+## Requirments
+
+Make sure DGGRID is compiled and available on your system. Remember the path where the `dggrid` executable is, or add `dggrid` to your `$PATH`.
+
+## Usage Example
+
+Create a new crate with `cargo new` and add this dependency in your `cargo.toml`. I expect to publish this to crates.io in the future, which will simplify this with `cargo add dggrs`.
+````
+[dependencies]
+dggrs = {version = "0.1.0", git = git@gitlab.com/geoinsight/dggrs.git}
+````
+
+In your `main.rs` add the following code. In this example the DGGRID generator service is instantiated using the path to the DGGRID executable `dggrid` and a path to the work directory `/dev/shm`. 
+
+````
+use dggrs;
+use geo::geometry::Point;
+fn main() {
+    let configs = vec![
+        (
+            String::from("DGGRID"),
+            String::from("ISEA3H"),
+            String::from("03a000000000000000"),
+        ),
+        (
+            String::from("DGGRID"),
+            String::from("IGEO7"),
+            String::from("054710bfffffffffff"),
+        ),
+    ];
+
+    let bbox: Option<Vec<Vec<f64>>> = Some(vec![
+        vec![-77.0, 39.0], // lower left
+        vec![-76.0, 40.0], // upper right
+    ]);
+
+    let pnt = Point::new(10.9, 4.9);
+    for (tool, dggs, zone_id) in configs {
+        println!("=== DGGS Type: {} ===", dggs);
+
+        let generator = dggrs::get(&tool, &dggs);
+
+        println!("Global");
+        let result = generator.zones_from_bbox(2, false, None);
+        println!(
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
+        );
+
+        println!("Global with Bbox");
+        let result = generator.zones_from_bbox(2, false, bbox.clone());
+        println!(
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
+        );
+
+        println!("Point");
+        let result = generator.zone_from_point(6, pnt, false);
+        println!(
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
+        );
+
+        println!("Subzones of {}", zone_id);
+        let result = generator.zones_from_parent(6, zone_id.clone(), false);
+        println!(
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
+        );
+
+        println!("Single Zone {}", zone_id.clone());
+        let result = generator.zone_from_id(zone_id.clone(), false);
+        println!(
+            "{:?} \nGenerated {} zones",
+            result.zones,
+            result.zones.len()
+        );
+    }
+}
+````
+
+Instead of printing out the length of `result.zones.len()` you can also print out the struct itself.
