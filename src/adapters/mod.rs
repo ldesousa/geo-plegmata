@@ -8,3 +8,4 @@
 // except according to those terms.
 
 pub mod dggrid;
+pub mod h3o;
