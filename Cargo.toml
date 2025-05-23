@@ -1,7 +1,7 @@
 [package]
 name = "geo_plegmata"
 version = "0.2.0"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 edition = "2024"
 readme = "README.md"
 
