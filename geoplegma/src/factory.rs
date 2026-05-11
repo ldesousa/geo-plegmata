@@ -10,47 +10,43 @@
 use crate::adapters::{
     dggal::grids::DggalImpl, dggrid::igeo7::Igeo7Impl, dggrid::isea3h::Isea3hImpl, h3o::h3::H3Impl,
 };
-use crate::error::factory::FactoryError;
-use crate::models::common::{DggrsTool, DggrsUid};
-use crate::ports::dggrs::DggrsPort;
+use crate::api::DggrsApi;
+use crate::constants::DGGRS_SPECS;
+use crate::error::factory::{DggrsUidError, FactoryError};
+use crate::types::{DggrsImplementation, DggrsSpec, DggrsUid};
 use std::sync::Arc;
 
-pub fn get(id: DggrsUid) -> Result<Arc<dyn DggrsPort>, FactoryError> {
+pub fn get(id: DggrsUid) -> Result<Arc<dyn DggrsApi>, FactoryError> {
     match id.spec().tool {
-        DggrsTool::DGGRID => match id {
+        DggrsImplementation::DGGRID => match id {
             DggrsUid::ISEA3HDGGRID => Ok(Arc::new(Isea3hImpl::default())),
             DggrsUid::IGEO7 => Ok(Arc::new(Igeo7Impl::default())),
-            _ => Err(FactoryError::UnsupportedCombination {
-                tool: DggrsTool::DGGRID,
-                id,
-            }),
+            _ => Err(DggrsUidError::Unsupported { id }.into()),
         },
 
-        DggrsTool::H3O => match id {
+        DggrsImplementation::H3O => match id {
             DggrsUid::H3 => Ok(Arc::new(H3Impl::default())),
-            _ => Err(FactoryError::UnsupportedCombination {
-                tool: DggrsTool::H3O,
-                id,
-            }),
+            _ => Err(DggrsUidError::Unsupported { id }.into()),
         },
 
-        DggrsTool::DGGAL => match id {
+        DggrsImplementation::DGGAL => match id {
             // All the DGGAL-backed IDs you support:
             DggrsUid::ISEA3HDGGAL
             | DggrsUid::IVEA3H
             | DggrsUid::ISEA9R
             | DggrsUid::IVEA9R
             | DggrsUid::RTEA3H
-            | DggrsUid::RTEA9R => Ok(Arc::new(DggalImpl::new(id))), // change DggalImpl::new to take DggrsId
-            _ => Err(FactoryError::UnsupportedCombination {
-                tool: DggrsTool::DGGAL,
-                id,
-            }),
+            | DggrsUid::RTEA9R
+            | DggrsUid::IVEA7H
+            | DggrsUid::IVEA7H_Z7 => Ok(Arc::new(DggalImpl::new(id))), // change DggalImpl::new to take DggrsId
+            _ => Err(DggrsUidError::Unsupported { id }.into()),
         },
 
-        DggrsTool::Native => Err(FactoryError::UnsupportedCombination {
-            tool: DggrsTool::Native,
-            id,
-        }),
+        DggrsImplementation::Native => Err(DggrsUidError::Unsupported { id }.into()),
     }
+}
+
+#[inline]
+pub fn registry() -> &'static [DggrsSpec] {
+    &DGGRS_SPECS
 }

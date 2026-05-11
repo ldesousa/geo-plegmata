@@ -9,10 +9,76 @@
 use crate::constants::DGGRS_SPECS;
 use crate::error::DggrsError;
 use crate::error::factory::DggrsUidError;
-use geo::{Point, Polygon};
 use std::convert::{From, TryFrom};
 use std::fmt;
 use std::str::FromStr;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Point {
+    pub lat: f64,
+    pub lon: f64,
+}
+
+impl Point {
+    pub fn new(lat: f64, lon: f64) -> Self {
+        Self { lat, lon }
+    }
+
+    pub fn to_coord(&self) -> geo::Coord {
+        geo::coord! { x: self.lon, y: self.lat }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Region {
+    pub exterior: Vec<Point>,
+}
+
+impl Region {
+    pub fn new(mut exterior: Vec<Point>) -> Self {
+        if let Some(first) = exterior.first().copied() {
+            if exterior.last().copied() != Some(first) {
+                exterior.push(first);
+            }
+        }
+        Self { exterior }
+    }
+
+    pub fn coords_count(&self) -> usize {
+        self.exterior.len()
+    }
+
+    pub fn to_geo_polygon(&self) -> geo::Polygon<f64> {
+        let coords: Vec<_> = self.exterior.iter().map(Point::to_coord).collect();
+        geo::Polygon::new(geo::LineString::from(coords), vec![])
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct BoundingBox {
+    pub min_lon: f64,
+    pub min_lat: f64,
+    pub max_lon: f64,
+    pub max_lat: f64,
+}
+
+impl BoundingBox {
+    pub fn new(min_lon: f64, min_lat: f64, max_lon: f64, max_lat: f64) -> Self {
+        Self {
+            min_lon,
+            min_lat,
+            max_lon,
+            max_lat,
+        }
+    }
+
+    pub const WORLD: Self = Self {
+        min_lon: -180.0,
+        min_lat: -90.0,
+        max_lon: 180.0,
+        max_lat: 90.0,
+    };
+}
 
 // NOTE: The naming needs to be adjusted to the DGGRS Registry
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -140,6 +206,7 @@ pub struct DggrsSpec {
     pub description: &'static str,
     pub uri: &'static str,
     pub crs: &'static str,
+    pub aperture: u32,
     pub min_refinement_level: RefinementLevel,
     pub max_refinement_level: RefinementLevel,
     pub default_refinement_level: RefinementLevel,
@@ -150,7 +217,7 @@ pub struct DggrsSpec {
 #[derive(Debug, Clone, Default)]
 pub struct Zone {
     pub id: ZoneId,
-    pub region: Option<Polygon>,
+    pub region: Option<Region>,
     pub center: Option<Point>,
     pub vertex_count: Option<u32>,
     pub children: Option<Vec<ZoneId>>,

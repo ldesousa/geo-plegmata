@@ -7,4 +7,14 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-pub mod common;
+#![doc = include_str!("../../README.md")]
+pub mod adapters;
+pub mod api;
+pub mod constants;
+pub mod error;
+pub mod factory;
+pub mod types;
+
+pub use api::DggrsApiConfig as config;
+/// This is the only re-export that is needed.
+pub use factory::{get, registry};

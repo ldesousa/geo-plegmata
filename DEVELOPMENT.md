@@ -24,6 +24,10 @@ cargo run --example basic
 
 If you want more detailed instructions, read below.
 
+### Build/Run Dependencies
+
+Make sure [DGGRID](https://github.com/sahrk/DGGRID) is compiled and available on your system. Remember the path where the `dggrid` executable is, or add `dggrid` to your `$PATH`.
+
 ### Build the project
 After you clone the repo, you can either build from the root of the repo or accessing one of the subcrates you want to work with and build from there. 
 As an example:

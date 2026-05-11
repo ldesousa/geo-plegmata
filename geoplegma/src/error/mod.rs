@@ -17,7 +17,7 @@ use crate::error::dggal::DggalError;
 use crate::error::dggrid::DggridError;
 use crate::error::factory::FactoryError;
 use crate::error::h3o::H3oError;
-use crate::models::common::{RefinementLevel, RelativeDepth};
+use crate::types::{RefinementLevel, RelativeDepth};
 use std::num::ParseFloatError;
 use thiserror::Error;
 

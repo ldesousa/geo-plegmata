@@ -8,7 +8,7 @@
 # except according to those terms.
 
 [package]
-name = "api"
+name = "geoplegma"
 version = "0.2.5"
 license = "MIT OR Apache-2.0"
 edition = "2024"

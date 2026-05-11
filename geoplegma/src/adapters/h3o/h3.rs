@@ -12,8 +12,8 @@ use crate::adapters::h3o::h3o::H3oAdapter;
 use crate::api::{DggrsApi, DggrsApiConfig};
 use crate::error::DggrsError;
 use crate::error::h3o::H3oError;
-use crate::models::common::{DggrsUid, RefinementLevel, RelativeDepth, ZoneId, Zones};
-use geo::{Point, Rect};
+use crate::types::{BoundingBox, DggrsUid, Point, RefinementLevel, RelativeDepth, ZoneId, Zones};
+use geo::{Rect, coord};
 use h3o::geom::{ContainmentMode, TilerBuilder};
 use h3o::{CellIndex, LatLng};
 use std::str::FromStr;
@@ -45,7 +45,7 @@ impl DggrsApi for H3Impl {
     fn zones_from_bbox(
         &self,
         refinement_level: RefinementLevel,
-        bbox: Option<Rect<f64>>,
+        bbox: Option<BoundingBox>,
         config: Option<DggrsApiConfig>,
     ) -> Result<Zones, DggrsError> {
         let cfg = config.unwrap_or_default();
@@ -57,10 +57,14 @@ impl DggrsApi for H3Impl {
 
         if let Some(b) = bbox {
             // NOTE: adapt resolution dynamically based on bbox size & depth
-            let _ = tiler.add(b.to_polygon());
+            let rect = Rect::new(
+                coord! { x: b.min_lon, y: b.min_lat },
+                coord! { x: b.max_lon, y: b.max_lat },
+            );
+            let _ = tiler.add(rect.to_polygon());
             h3o_zones = tiler.into_coverage().collect::<Vec<_>>();
         } else {
-            if refinement_level > self.default_refinement_level()? {
+            if refinement_level > self.max_refinement_level()? {
                 return Err(DggrsError::RefinementLevelTooHigh(refinement_level));
             }
             h3o_zones = CellIndex::base_cells()
@@ -81,7 +85,7 @@ impl DggrsApi for H3Impl {
         config: Option<DggrsApiConfig>,
     ) -> Result<Zones, DggrsError> {
         let cfg = config.unwrap_or_default();
-        let coord = LatLng::new(point.x(), point.y()).expect("valid coord");
+        let coord = LatLng::new(point.lat, point.lon).expect("valid coord");
 
         let h3o_zone = coord.to_cell(refinement_level_to_h3_resolution(refinement_level)?);
 
@@ -117,6 +121,39 @@ impl DggrsApi for H3Impl {
 
         Ok(to_zones(h3o_sub_zones, cfg)?)
     }
+
+    fn primary_parent_from_zone(
+        &self,
+        zone_id: ZoneId,
+        config: Option<DggrsApiConfig>,
+    ) -> Result<Zones, DggrsError> {
+        let cfg = config.unwrap_or_default();
+        let h3o_zone = CellIndex::from_str(&zone_id.to_string()).map_err(|e| {
+            DggrsError::H3o(H3oError::InvalidZoneID {
+                zone_id: zone_id.to_string(),
+                source: e,
+            })
+        })?;
+
+        let refinement_level = RefinementLevel::new(h3o_zone.resolution() as i32)?;
+        if refinement_level <= self.min_refinement_level()? {
+            return Err(DggrsError::H3o(H3oError::ResolutionLimitReached {
+                zone_id: zone_id.to_string(),
+            }));
+        }
+
+        let parent_level = RefinementLevel::new(refinement_level.get() - 1)?;
+        let parent = h3o_zone
+            .parent(refinement_level_to_h3_resolution(parent_level)?)
+            .ok_or_else(|| {
+                DggrsError::H3o(H3oError::ResolutionLimitReached {
+                    zone_id: zone_id.to_string(),
+                })
+            })?;
+
+        Ok(to_zones(vec![parent], cfg)?)
+    }
+
     fn zone_from_id(
         &self,
         zone_id: ZoneId, // ToDo: needs validation function
@@ -131,6 +168,12 @@ impl DggrsApi for H3Impl {
         })?;
 
         Ok(to_zones(vec![h3o_zone], cfg)?)
+    }
+
+    fn zone_count(&self, level: RefinementLevel) -> Result<u64, DggrsError> {
+        let r = level.get();
+        let aperture: u64 = self.id.spec().aperture.into();
+        Ok(2 + 120 * (aperture.pow(r as u32)))
     }
 
     fn min_refinement_level(&self) -> Result<RefinementLevel, DggrsError> {

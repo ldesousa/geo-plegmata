@@ -146,9 +146,9 @@ pub fn point_in_spherical_triangle(p: Vector3D, triangle: [Vector3D; 3]) -> bool
     let n_ca = c.cross(a);
 
     // Check if P is on same side as opposite vertex
-    let inside_ab = n_ab.dot(c) * n_ab.dot(p) >= 0.0;
-    let inside_bc = n_bc.dot(a) * n_bc.dot(p) >= 0.0;
-    let inside_ca = n_ca.dot(b) * n_ca.dot(p) >= 0.0;
+    let inside_ab = n_ab.dot(c) * n_ab.dot(p) >= -DEGENERATE_TRIANGLE_THRESHOLD;
+    let inside_bc = n_bc.dot(a) * n_bc.dot(p) >= -DEGENERATE_TRIANGLE_THRESHOLD;
+    let inside_ca = n_ca.dot(b) * n_ca.dot(p) >= -DEGENERATE_TRIANGLE_THRESHOLD;
 
     inside_ab && inside_bc && inside_ca
 }
@@ -234,6 +234,23 @@ pub fn stable_angle_between(u: Vector3D, v: Vector3D) -> f64 {
 ///     assert!((u + v + w - 1.0).abs() < 1e-10); // coordinates sum to 1
 /// }
 /// ```
+/// 
+// @TODO - the barycentric_coordinates function is not for the sphere, 
+// the following function seems to be the correct, needs changing
+// pub fn compute_spherical_barycentric(
+//     point: Vector3D,
+//     v0: Vector3D,
+//     v1: Vector3D,
+//     v2: Vector3D,
+// ) -> (f64, f64, f64) {
+//     let total_area = spherical_triangle_area([v0, v1, v2]).unwrap();
+//     let area0 = spherical_triangle_area([point, v1, v2]).unwrap();
+//     let area1 = spherical_triangle_area([v0, point, v2]).unwrap();
+//     let area2 = spherical_triangle_area([v0, v1, point]).unwrap();
+
+//     (area0 / total_area, area1 / total_area, area2 / total_area)
+// }
+
 pub fn barycentric_coordinates(
     point: Vector3D,
     triangle: [Vector3D; 3],

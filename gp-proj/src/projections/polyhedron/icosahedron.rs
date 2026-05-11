@@ -10,7 +10,7 @@
 use std::f64::consts::PI;
 
 use crate::{
-    constants::PolyhedronConstants, models::vector_3d::Vector3D,
+    models::vector_3d::Vector3D,
     projections::polyhedron::geometry::Face,
 };
 
@@ -36,8 +36,7 @@ pub fn new() -> Polyhedron {
 /// Create the 12 icosahedron vertices
 fn create_vertices() -> Vec<Vector3D> {
     let mut vertices = Vec::with_capacity(12);
-    let phi = PolyhedronConstants::golden_ratio();
-    let z = 1.0 / (1.0 + phi.powi(2)).sqrt();
+    let z = 1.0 / 5.0_f64.sqrt();
     let r = (1.0 - z.powi(2)).sqrt();
 
     // North Pole (Vertex 0)

@@ -7,21 +7,9 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::models::common::{
+use crate::types::{
     DggrsImplementation, DggrsName, DggrsSpec, DggrsUid, RefinementLevel, RelativeDepth,
 };
-use geo::{Coord, Rect};
-
-pub fn whole_earth_bbox() -> Rect<f64> {
-    Rect::new(
-        Coord {
-            x: -180.0,
-            y: -90.0,
-        },
-        Coord { x: 180.0, y: 90.0 },
-    )
-}
-
 pub const DGGRS_SPECS: [DggrsSpec; 11] = [
     DggrsSpec {
         id: DggrsUid::ISEA3HDGGRID,
@@ -31,6 +19,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 3,
         min_refinement_level: RefinementLevel::new_const(1),
         max_refinement_level: RefinementLevel::new_const(36),
         default_refinement_level: RefinementLevel::new_const(3),
@@ -45,6 +34,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 7,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(20),
         default_refinement_level: RefinementLevel::new_const(2),
@@ -59,6 +49,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 7,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(16),
         default_refinement_level: RefinementLevel::new_const(2),
@@ -73,6 +64,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 3,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(33),
         default_refinement_level: RefinementLevel::new_const(3),
@@ -87,6 +79,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 3,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(33),
         default_refinement_level: RefinementLevel::new_const(3),
@@ -101,6 +94,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 9,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(16),
         default_refinement_level: RefinementLevel::new_const(2),
@@ -115,6 +109,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 9,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(16),
         default_refinement_level: RefinementLevel::new_const(2),
@@ -129,6 +124,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 3,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(33),
         default_refinement_level: RefinementLevel::new_const(2),
@@ -143,6 +139,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         uri: "",
         crs: "",
         tool: DggrsImplementation::DGGAL,
+        aperture: 9,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(16),
         default_refinement_level: RefinementLevel::new_const(2),
@@ -157,6 +154,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 7,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(20),
         default_refinement_level: RefinementLevel::new_const(2),
@@ -171,6 +169,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         description: "",
         uri: "",
         crs: "",
+        aperture: 7,
         min_refinement_level: RefinementLevel::new_const(0),
         max_refinement_level: RefinementLevel::new_const(20),
         default_refinement_level: RefinementLevel::new_const(2),

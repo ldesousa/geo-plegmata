@@ -6,10 +6,10 @@
 // <LICENCE-MIT or http://opensource.org/licenses/MIT>, at your
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
-use api::error;
-use api::models::common::{DggrsUid, RefinementLevel, RelativeDepth};
-use api::{get, registry};
-use geo::{Point, Rect};
+use geoplegma::error;
+use geoplegma::types::{DggrsUid, RefinementLevel, RelativeDepth};
+use geoplegma::{get, registry};
+use geoplegma::api::{BoundingBox, Point};
 use std::time::Instant;
 
 /// This is just an example and basic testing function if there is output or not
@@ -31,14 +31,14 @@ pub fn main() -> Result<(), error::DggrsError> {
     ];
 
     let points = vec![
-        Point::new(19.96, 5.34),
-        //        Point::new(9.06, 52.98),
-        //      Point::new(-29.11, -15.28),
+        Point::new(5.34, 19.96),
+        //        Point::new(52.98, 9.06),
+        //      Point::new(-15.28, -29.11),
     ];
 
-    let bbox = Rect::new(Point::new(-10.0, -10.0), Point::new(10.0, 10.0));
+    let bbox = BoundingBox::new(-10.0, -10.0, 10.0, 10.0);
 
-    let mut options = api::config {
+    let mut options = geoplegma::config {
         region: true,
         children: false,
         center: false,

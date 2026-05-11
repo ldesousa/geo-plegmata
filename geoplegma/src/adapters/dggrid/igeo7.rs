@@ -12,16 +12,13 @@ use crate::adapters::dggrid::dggrid::DggridAdapter;
 use crate::api::{DggrsApi, DggrsApiConfig};
 use crate::error::DggrsError;
 use crate::error::dggrid::DggridError;
-use crate::models::common::{DggrsUid, RefinementLevel, RelativeDepth, ZoneId, Zones};
-use core::f64;
-use geo::geometry::Point;
+use crate::types::{BoundingBox, DggrsUid, Point, RefinementLevel, RelativeDepth, ZoneId, Zones};
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 pub const CLIP_CELL_DENSIFICATION: u8 = 50; // DGGRID option
-use geo::Rect;
 
 pub struct Igeo7Impl {
     id: DggrsUid,
@@ -51,7 +48,7 @@ impl DggrsApi for Igeo7Impl {
     fn zones_from_bbox(
         &self,
         refinement_level: RefinementLevel,
-        bbox: Option<Rect<f64>>,
+        bbox: Option<BoundingBox>,
         config: Option<DggrsApiConfig>,
     ) -> Result<Zones, DggrsError> {
         let cfg = config.unwrap_or_default();
@@ -87,7 +84,7 @@ impl DggrsApi for Igeo7Impl {
             );
         }
 
-        common::write::file(meta_path.clone());
+        common::write::file(&meta_path);
         common::dggrid::execute(&self.adapter.executable, &meta_path);
         let result = common::output::ingest(&aigen_path, &children_path, &neighbor_path, &cfg)?;
         common::cleanup(
@@ -144,10 +141,10 @@ impl DggrsApi for Igeo7Impl {
             .create(true)
             .open(&input_path)
             .expect("cannot open file");
-        let _ = writeln!(input_file, "{} {}", point.y(), point.x())
+        let _ = writeln!(input_file, "{} {}", point.lon, point.lat)
             .expect("Cannot create point input file");
 
-        common::write::file(meta_path.clone());
+        common::write::file(&meta_path);
         common::dggrid::execute(&self.adapter.executable, &meta_path);
         let result = common::output::ingest(&aigen_path, &children_path, &neighbor_path, &cfg)?;
         common::cleanup(
@@ -201,7 +198,7 @@ impl DggrsApi for Igeo7Impl {
         );
         let _ = writeln!(meta_file, "clip_cell_addresses \"{}\"", parent_zone_id);
         let _ = writeln!(meta_file, "input_address_type Z7");
-        common::write::file(meta_path.clone());
+        common::write::file(&meta_path);
         common::dggrid::execute(&self.adapter.executable, &meta_path);
 
         let result = common::output::ingest(&aigen_path, &children_path, &neighbor_path, &cfg)?;
@@ -216,6 +213,71 @@ impl DggrsApi for Igeo7Impl {
         );
         Ok(result)
     }
+
+    fn primary_parent_from_zone(
+        &self,
+        zone_id: ZoneId,
+        config: Option<DggrsApiConfig>,
+    ) -> Result<Zones, DggrsError> {
+        let cfg = config.unwrap_or_default();
+        let (meta_path, aigen_path, children_path, neighbor_path, bbox_path, input_path) =
+            common::dggrid::setup(&self.adapter.workdir);
+
+        let child_level = get_refinement_level_from_z7_zone_id(&zone_id)?;
+        if child_level.get() == 0 {
+            return Err(DggrsError::Dggrid(DggridError::InvalidZ7Format(
+                "Root-level zones do not have a parent".to_string(),
+            )));
+        }
+        let parent_level = RefinementLevel::new(child_level.get() - 1)?;
+
+        let _ = common::write::metafile(
+            &meta_path,
+            &parent_level,
+            &aigen_path.with_extension(""),
+            &children_path.with_extension(""),
+            &neighbor_path.with_extension(""),
+            &cfg,
+        );
+
+        let _ = igeo7_metafile(&meta_path);
+
+        let mut meta_file = OpenOptions::new()
+            .append(true)
+            .write(true)
+            .open(&meta_path)
+            .expect("cannot open file");
+
+        let _ = writeln!(
+            meta_file,
+            "input_file_name {}",
+            &input_path.to_string_lossy()
+        );
+
+        let mut input_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&input_path)
+            .expect("cannot open file");
+        let _ = writeln!(input_file, "{}", zone_id).expect("Cannot create zone id input file");
+
+        let _ = writeln!(meta_file, "dggrid_operation TRANSFORM_POINTS");
+        let _ = writeln!(meta_file, "input_address_type Z7");
+        common::write::file(&meta_path);
+        common::dggrid::execute(&self.adapter.executable, &meta_path);
+        let result = common::output::ingest(&aigen_path, &children_path, &neighbor_path, &cfg)?;
+        common::cleanup(
+            &meta_path,
+            &aigen_path,
+            &children_path,
+            &neighbor_path,
+            &bbox_path,
+            &input_path,
+        );
+        Ok(result)
+    }
+
     fn zone_from_id(
         &self,
         zone_id: ZoneId,
@@ -261,7 +323,7 @@ impl DggrsApi for Igeo7Impl {
 
         let _ = writeln!(meta_file, "dggrid_operation TRANSFORM_POINTS");
         let _ = writeln!(meta_file, "input_address_type Z7");
-        common::write::file(meta_path.clone());
+        common::write::file(&meta_path);
         common::dggrid::execute(&self.adapter.executable, &meta_path);
         let result = common::output::ingest(&aigen_path, &children_path, &neighbor_path, &cfg)?;
         common::cleanup(
@@ -273,6 +335,12 @@ impl DggrsApi for Igeo7Impl {
             &input_path,
         );
         Ok(result)
+    }
+
+    fn zone_count(&self, refinement_level: RefinementLevel) -> Result<u64, DggrsError> {
+        let r = refinement_level.get();
+        let aperture: u64 = self.id.spec().aperture.into();
+        Ok(2 + 10 * (aperture.pow(r as u32)))
     }
 
     fn min_refinement_level(&self) -> Result<RefinementLevel, DggrsError> {
@@ -296,7 +364,7 @@ impl DggrsApi for Igeo7Impl {
     }
 }
 
-pub fn igeo7_metafile(meta_path: &PathBuf) -> io::Result<()> {
+pub fn igeo7_metafile(meta_path: &Path) -> io::Result<()> {
     debug!("Writing to {:?}", meta_path);
     // Append to metafile format
     let mut meta_file = OpenOptions::new()
