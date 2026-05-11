@@ -1,5 +1,5 @@
 [workspace]
-members = ["geoplegma", "gp-bindings/js","gp-proj"]
+members = ["geoplegma", "gp-bindings/js", "gp-proj", "gp-dggrs"]
 exclude = ["tests", "diagrams", "docs"]
 resolver = "3"
 

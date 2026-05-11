@@ -8,4 +8,5 @@ rust-version = "1.88"
 
 [dependencies]
 geo = "0.30.0"
-api = { path = "../api" }
+geoplegma = { path = "../geoplegma" }
+gp-proj = { path = "../gp-proj" }

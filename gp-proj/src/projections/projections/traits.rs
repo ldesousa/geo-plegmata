@@ -8,7 +8,9 @@
 // except according to those terms
 
 use crate::{
-    Vector3D, constants::WGS84, projections::{layout::traits::Layout, polyhedron::Polyhedron}
+    Vector3D,
+    constants::WGS84,
+    projections::{layout::traits::Layout, polyhedron::Polyhedron},
 };
 use geo::{Coord, Point};
 
@@ -22,6 +24,7 @@ pub struct ForwardBary {
 pub struct ForwardCartesian {
     pub coords: Coord,
     pub face: usize,
+    pub triangle: [(f64, f64); 3],
 }
 
 #[derive(Debug)]
@@ -41,12 +44,7 @@ pub trait Projection {
     ) -> Vec<ForwardCartesian>;
     fn cartesian_to_geo(&self, coords: Vec<Coord>) -> Point;
 
-    fn compute_distortion(
-        &self,
-        lat: f64,
-        lon: f64,
-        polyhedron: &Polyhedron,
-    ) -> DistortionMetrics;
+    fn compute_distortion(&self, lat: f64, lon: f64, polyhedron: &Polyhedron) -> DistortionMetrics;
 
     fn to_3d(lat: f64, lon: f64) -> [f64; 3] {
         let x = lat.cos() * lon.cos();

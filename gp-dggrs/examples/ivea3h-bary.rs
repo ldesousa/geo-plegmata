@@ -9,7 +9,7 @@
 // except according to those terms.
 
 use geo::Point;
-use api::models::common::RefinementLevel;
+use geoplegma::types::RefinementLevel;
 use gp_dggrs::sys_api::DggrsSysApi;
 use gp_dggrs::impls::ivea3h_bary::IVEA3HBary;
 
