@@ -189,36 +189,53 @@ impl DggrsSysApi for IVEA3HBary {
         );
         let bary = (bary_coords.0, bary_coords.2);
 
+        println!("Barycentric: {:?}", bary);
+
         let denom = IVEA3HBary::compute_denom(refinement_level);
 
         let mut zone_centre = (1 as u32, 1 as u32); // the result
 
         let mut candidates: Vec<(u32, u32)> = Vec::new();
+        
+        let i_down = (bary.0 * denom as f64).floor() as u32;
+        let i_up = (bary.0 * denom as f64).ceil() as u32;
 
         let j_down = (bary.1 * denom as f64).floor() as u32;
         let j_up = (bary.1 * denom as f64).ceil() as u32;
 
-        // Odd case
-        if (refinement_level.get() % 2) > 0 {
-            let start_down = j_down % Self::APERTURE;
-            let start_up = j_up % Self::APERTURE;
-            let num_hops = (bary.0 * denom as f64 / Self::APERTURE as f64).floor() as u32; // integer division
-            let i_down: u32 = start_down + num_hops * Self::APERTURE;
-            let i_up: u32 = start_up + num_hops * Self::APERTURE;
-            candidates.push((i_down, j_down));
-            candidates.push((i_down + Self::APERTURE, j_down));
-            candidates.push((i_up, j_up));
-            candidates.push((i_up + Self::APERTURE, j_up));
-        }
-        // Even case
-        else {
-            let i_down: u32 = (bary.0 * denom as f64).floor() as u32;
-            let i_up: u32 = (bary.0 * denom as f64).ceil() as u32;
-            candidates.push((i_down, j_down));
-            candidates.push((i_down, j_up));
-            candidates.push((i_up, j_down));
-            candidates.push((i_up, j_up));
-        }
+        candidates.push((i_down, j_down));
+        candidates.push((i_down, j_up));
+        candidates.push((i_up, j_down));
+        candidates.push((i_up, j_up));
+
+
+        //println!("Candidates j {} {}", j_down, j_up);
+
+        //// Odd case
+        //if (refinement_level.get() % 2) > 0 {
+        //    let start_down = j_down % Self::APERTURE;
+        //    let start_up = j_up % Self::APERTURE;
+        //    let num_hops = (bary.0 * denom as f64 / Self::APERTURE as f64).floor() as u32; // integer division
+        //    let i_down: u32 = start_down + num_hops * Self::APERTURE;
+        //    let i_up: u32 = start_up + num_hops * Self::APERTURE;
+        //    candidates.push((i_down, j_down));
+        //    candidates.push((i_down + Self::APERTURE, j_down));
+        //    candidates.push((i_up, j_up));
+        //    candidates.push((i_up + Self::APERTURE, j_up));
+        //    println!("Candidates i {} {}", i_down, i_up);
+        //}
+        //// Even case
+        //else {
+        //    let i_down: u32 = (bary.0 * denom as f64).floor() as u32;
+        //    let i_up: u32 = (bary.0 * denom as f64).ceil() as u32;
+        //    candidates.push((i_down, j_down));
+        //    candidates.push((i_down, j_up));
+        //    candidates.push((i_up, j_down));
+        //    candidates.push((i_up, j_up));
+        //    println!("Candidates i {} {}", i_down, i_up);
+        //}
+
+        println!("Candidates {:?}", candidates);
 
         // Find closest cell centre
         let mut current_dist = f64::MAX;
@@ -235,12 +252,15 @@ impl DggrsSysApi for IVEA3HBary {
                 zone_centre = centre;
             }
         }
+        
+        println!("Winner {:?}", zone_centre);
 
         // Bundle coords into index
         // bundle_index(zone_centre.0, zone_centre.1, refinement_level, bary.3);
         // return zone_centre;
         let face: i32 = 10;
         let unique = IVEA3HBary::edge_cases(zone_centre.0, zone_centre.1, face, denom);
+        println!("After edge cases: {:?}", unique);
         return unique.0 as u64 +                        // i
                unique.1 as u64 * 2_u64.pow(26) as u64 + // j
                unique.2 as u64 * 2_u64.pow(52) as u64 + // face
