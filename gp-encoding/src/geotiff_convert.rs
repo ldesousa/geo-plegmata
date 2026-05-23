@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use gdal::raster::GdalDataType;
 use gdal::spatial_ref::{CoordTransform, SpatialRef};
@@ -16,6 +15,7 @@ use crate::error::EncodingError;
 use crate::models::{Compression, DataType, DatasetMetadata};
 use crate::stats::{BandStatsCollector, ConversionReport, SourceRasterReport};
 use crate::storage::StorageBackend;
+use crate::value::{encode_value_from_f64, parse_fill_value_to_f64};
 
 trait NativeBytes {
     fn to_native_bytes(self) -> Vec<u8>;
@@ -103,13 +103,13 @@ fn get_corners_and_pixel_size(
     Ok((bbox, pixel_w, pixel_h))
 }
 
-fn nearest_pixel_index_for_center(
+fn nearest_pixel_coord_for_center(
     center: &Point,
     wgs84_to_src: &CoordTransform,
     gt: [f64; 6],
     width: usize,
     height: usize,
-) -> Result<Option<usize>, EncodingError> {
+) -> Result<Option<(usize, usize)>, EncodingError> {
     if width == 0 || height == 0 {
         return Err(EncodingError::GeoTiff(
             "raster has zero width or height".into(),
@@ -144,49 +144,7 @@ fn nearest_pixel_index_for_center(
         return Ok(None);
     }
 
-    Ok(Some((row as usize) * width + (col as usize)))
-}
-
-fn compute_chunk_bytes_from_data<T>(
-    data: &[T],
-    chunk_pixel_indices: &[Vec<Option<usize>>],
-    chunk_size: u64,
-    stats: &mut BandStatsCollector,
-) -> Result<Vec<Vec<u8>>, EncodingError>
-where
-    T: NativeBytes + Copy + Send + Sync,
-{
-    let value_size = std::mem::size_of::<T>();
-
-    let results: Vec<(Vec<u8>, BandStatsCollector)> = chunk_pixel_indices
-        .par_iter()
-        .map(|pixel_indices| {
-            let mut local_stats = BandStatsCollector::new(0, String::new());
-            let mut bytes = vec![0_u8; chunk_size as usize * value_size];
-
-            for (in_chunk_index, &pixel_index_opt) in pixel_indices.iter().enumerate() {
-                if let Some(pixel_index) = pixel_index_opt {
-                    let value = data[pixel_index];
-                    local_stats.record_value(value.to_f64());
-                    let value_bytes = value.to_native_bytes();
-
-                    let start = in_chunk_index * value_size;
-                    let end = start + value_size;
-                    bytes[start..end].copy_from_slice(&value_bytes);
-                }
-            }
-
-            (bytes, local_stats)
-        })
-        .collect();
-
-    let mut all_chunks = Vec::with_capacity(chunk_pixel_indices.len());
-    for (bytes, local_stats) in results {
-        stats.merge(&local_stats);
-        all_chunks.push(bytes);
-    }
-
-    Ok(all_chunks)
+    Ok(Some((col as usize, row as usize)))
 }
 
 fn get_closest_refinement_level(
@@ -307,14 +265,27 @@ pub fn compute_source_report(dataset: &Dataset) -> Result<SourceRasterReport, En
         let mut collector = BandStatsCollector::new((band_idx - 1) as u32, dtype_name);
         collector.set_total_cells(total_pixels);
 
-        let raster = band.read_band_as::<f64>()?;
-        for &v in raster.data() {
-            let is_nodata = match nodata {
-                Some(nd) => v == nd || (v.is_nan() && nd.is_nan()),
-                None => false,
-            };
-            if !is_nodata && v.is_finite() {
-                collector.record_value(v);
+        let chunk_w = 4096;
+        let chunk_h = 4096;
+        for y in (0..height).step_by(chunk_h) {
+            let h = chunk_h.min(height - y);
+            for x in (0..width).step_by(chunk_w) {
+                let w = chunk_w.min(width - x);
+                let raster = band.read_as::<f64>(
+                    (x as isize, y as isize),
+                    (w, h),
+                    (w, h),
+                    None,
+                )?;
+                for &v in raster.data() {
+                    let is_nodata = match nodata {
+                        Some(nd) => v == nd || (v.is_nan() && nd.is_nan()),
+                        None => false,
+                    };
+                    if !is_nodata && v.is_finite() {
+                        collector.record_value(v);
+                    }
+                }
             }
         }
 
@@ -373,7 +344,6 @@ where
                 GdalDataType::UInt64 => DataType::UInt64,
                 GdalDataType::Float32 => DataType::Float32,
                 GdalDataType::Float64 => DataType::Float64,
-                // TODO: add every type
                 _ => {
                     return Err(EncodingError::GeoTiff(format!(
                         "unsupported GDAL data type: {band_type:?}"
@@ -453,43 +423,6 @@ where
     .progress_chars("=> ");
     chunk_progress.set_style(style);
 
-    let progress_counter = AtomicU64::new(0);
-    let chunk_child_centers: Vec<Vec<Point>> = chunk_zones
-        .zones
-        .par_iter()
-        .map(|chunk_zone| {
-            let children =
-                grid.zones_from_parent(relative_depth, chunk_zone.id.clone(), Some(center_config))?;
-            if children.zones.len() > chunk_size as usize {
-                return Err(EncodingError::Grid(format!(
-                    "chunk {} has {} children but chunk_size is {}",
-                    chunk_zone.id,
-                    children.zones.len(),
-                    chunk_size
-                )));
-            }
-
-            let result = children
-                .zones
-                .iter()
-                .map(|child| {
-                    child.center.ok_or_else(|| {
-                        EncodingError::Grid(format!(
-                            "zone {} in chunk {} has no center coordinates",
-                            child.id, chunk_zone.id
-                        ))
-                    })
-                })
-                .collect::<Result<Vec<_>, EncodingError>>();
-
-            let done = progress_counter.fetch_add(1, Ordering::Relaxed) + 1;
-            chunk_progress.set_position(done);
-
-            result
-        })
-        .collect::<Result<_, EncodingError>>()?;
-    chunk_progress.finish_with_message("processing chunk zones [done]");
-
     let band_dtype_names: Vec<String> = metadata_bands
         .iter()
         .map(|b| format!("{:?}", b.dtype))
@@ -516,11 +449,40 @@ where
     backend.set_level_chunk_ids(refinement_level.get() as u32, chunk_level.get() as u32, chunk_ids.clone())?;
 
     let src_srs_wkt = src_srs.to_wkt()?;
+    let band_count = bands.len();
 
-    let chunk_pixel_indices: Vec<Vec<Option<usize>>> = chunk_child_centers
+    for band_idx in 0..band_count {
+        backend.create_level(
+            refinement_level.get() as u32,
+            band_idx as u32,
+            encoded_num_cells,
+            chunk_size,
+        )?;
+    }
+
+    let fill_value_bytes: Vec<Vec<u8>> = backend
+        .metadata()
+        .attributes
+        .iter()
+        .map(|attr| {
+            let fill_val = match &attr.fill_value {
+                Some(value) => parse_fill_value_to_f64(&attr.dtype, value)?,
+                None => 0.0,
+            };
+            encode_value_from_f64(&attr.dtype, fill_val)
+        })
+        .collect::<Result<_, EncodingError>>()?;
+
+    let progress_counter = std::sync::atomic::AtomicU64::new(0);
+
+    let geotiff_path_buf = geotiff_path.to_path_buf();
+
+    let results: Vec<Vec<BandStatsCollector>> = chunk_zones
+        .zones
         .par_iter()
+        .enumerate()
         .map_init(
-            || -> Result<CoordTransform, EncodingError> {
+            || -> Result<(CoordTransform, Dataset), EncodingError> {
                 let mut wgs84 = SpatialRef::from_epsg(4326)?;
                 wgs84.set_axis_mapping_strategy(
                     gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder,
@@ -529,91 +491,165 @@ where
                 src_srs.set_axis_mapping_strategy(
                     gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder,
                 );
-                Ok(CoordTransform::new(&wgs84, &src_srs)?)
+                let transform = CoordTransform::new(&wgs84, &src_srs)?;
+                let thread_dataset = Dataset::open(&geotiff_path_buf)?;
+                Ok((transform, thread_dataset))
             },
-            |transform_result, child_centers| {
-                let wgs84_to_src = match transform_result {
-                    Ok(t) => t,
+            |state, (chunk_index, chunk_zone)| {
+                let (wgs84_to_src, thread_dataset) = match state {
+                    Ok(s) => s,
                     Err(e) => {
                         return Err(EncodingError::GeoTiff(format!(
-                            "failed to create CoordTransform: {e}"
-                        )))
+                            "failed to initialize thread-local transform/dataset: {e}"
+                        )));
                     }
                 };
 
-                let mut indices = Vec::with_capacity(child_centers.len());
-                for center in child_centers {
-                    let idx = nearest_pixel_index_for_center(center, wgs84_to_src, gt, width, height)?;
-                    indices.push(idx);
+                let mut local_collectors = Vec::with_capacity(band_count);
+                for (band_idx, dtype_name) in band_dtype_names.iter().enumerate() {
+                    local_collectors.push(BandStatsCollector::new(band_idx as u32, dtype_name.clone()));
                 }
-                Ok(indices)
-            },
-        )
-        .collect::<Result<_, EncodingError>>()?;
 
-    let mut band_stats = Vec::new();
-
-    for (band_index, band_type) in bands.into_iter().enumerate() {
-        let band = dataset.rasterband(band_index + 1)?;
-        let dtype_name = band_dtype_names[band_index].clone();
-        let mut collector = BandStatsCollector::new(band_index as u32, dtype_name);
-        collector.set_total_cells(encoded_num_cells);
-
-        macro_rules! process_band_data {
-            ($t:ty) => {{
-                let raster = band.read_band_as::<$t>()?;
-                if raster.data().len() != width * height {
-                    return Err(EncodingError::GeoTiff(format!(
-                        "raster data length {} does not match expected pixel count {}",
-                        raster.data().len(),
-                        width * height
+                let children = grid.zones_from_parent(relative_depth, chunk_zone.id.clone(), Some(center_config))?;
+                if children.zones.len() > chunk_size as usize {
+                    return Err(EncodingError::Grid(format!(
+                        "chunk {} has {} children but chunk_size is {}",
+                        chunk_zone.id,
+                        children.zones.len(),
+                        chunk_size
                     )));
                 }
-                compute_chunk_bytes_from_data(
-                    raster.data(),
-                    &chunk_pixel_indices,
-                    chunk_size,
-                    &mut collector,
-                )
-            }};
+
+                let mut child_pixel_coords = Vec::with_capacity(children.zones.len());
+                let mut min_col = usize::MAX;
+                let mut max_col = 0;
+                let mut min_row = usize::MAX;
+                let mut max_row = 0;
+                let mut has_valid_coords = false;
+
+                for child in &children.zones {
+                    let center = child.center.ok_or_else(|| {
+                        EncodingError::Grid(format!(
+                            "zone {} in chunk {} has no center coordinates",
+                            child.id, chunk_zone.id
+                        ))
+                    })?;
+
+                    let coord = nearest_pixel_coord_for_center(&center, wgs84_to_src, gt, width, height)?;
+                    if let Some((col, row)) = coord {
+                        min_col = min_col.min(col);
+                        max_col = max_col.max(col);
+                        min_row = min_row.min(row);
+                        max_row = max_row.max(row);
+                        has_valid_coords = true;
+                    }
+                    child_pixel_coords.push(coord);
+                }
+
+                for band_idx in 0..band_count {
+                    let band = thread_dataset.rasterband(band_idx + 1)?;
+                    let band_type = band.band_type();
+                    let dtype = &backend.metadata().attributes[band_idx].dtype;
+                    let val_size = dtype.byte_size();
+                    let fill_val_bytes = &fill_value_bytes[band_idx];
+
+                    let mut chunk_bytes = vec![0_u8; chunk_size as usize * val_size];
+                    for chunk_cell_idx in 0..chunk_size as usize {
+                        let start = chunk_cell_idx * val_size;
+                        let end = start + val_size;
+                        chunk_bytes[start..end].copy_from_slice(fill_val_bytes);
+                    }
+
+                    if has_valid_coords {
+                        let window_w = max_col - min_col + 1;
+                        let window_h = max_row - min_row + 1;
+                        let window_area = window_w * window_h;
+
+                        macro_rules! process_window {
+                            ($t:ty) => {{
+                                if window_area > 10_000_000 {
+                                    for (in_chunk_idx, &coord_opt) in child_pixel_coords.iter().enumerate() {
+                                        if let Some((col, row)) = coord_opt {
+                                            let pixel_buf = band.read_as::<$t>(
+                                                (col as isize, row as isize),
+                                                (1, 1),
+                                                (1, 1),
+                                                None,
+                                            )?;
+                                            let val = pixel_buf.data()[0];
+                                            local_collectors[band_idx].record_value(val.to_f64());
+                                            let val_bytes = val.to_native_bytes();
+                                            let start = in_chunk_idx * val_size;
+                                            let end = start + val_size;
+                                            chunk_bytes[start..end].copy_from_slice(&val_bytes);
+                                        }
+                                    }
+                                } else {
+                                    let buffer = band.read_as::<$t>(
+                                        (min_col as isize, min_row as isize),
+                                        (window_w, window_h),
+                                        (window_w, window_h),
+                                        None,
+                                    )?;
+                                    for (in_chunk_idx, &coord_opt) in child_pixel_coords.iter().enumerate() {
+                                        if let Some((col, row)) = coord_opt {
+                                            let local_col = col - min_col;
+                                            let local_row = row - min_row;
+                                            let val = buffer.data()[local_row * window_w + local_col];
+                                            local_collectors[band_idx].record_value(val.to_f64());
+                                            let val_bytes = val.to_native_bytes();
+                                            let start = in_chunk_idx * val_size;
+                                            let end = start + val_size;
+                                            chunk_bytes[start..end].copy_from_slice(&val_bytes);
+                                        }
+                                    }
+                                }
+                            }};
+                        }
+
+                        match band_type {
+                            GdalDataType::UInt8 => process_window!(u8),
+                            GdalDataType::Int8 => process_window!(i8),
+                            GdalDataType::UInt16 => process_window!(u16),
+                            GdalDataType::Int16 => process_window!(i16),
+                            GdalDataType::UInt32 => process_window!(u32),
+                            GdalDataType::Int32 => process_window!(i32),
+                            GdalDataType::UInt64 => process_window!(u64),
+                            GdalDataType::Int64 => process_window!(i64),
+                            GdalDataType::Float32 => process_window!(f32),
+                            GdalDataType::Float64 => process_window!(f64),
+                            _ => return Err(EncodingError::GeoTiff(format!(
+                                "unsupported GDAL data type: {band_type:?}"
+                            ))),
+                        }
+                    }
+
+                    backend.write_chunk(
+                        refinement_level.get() as u32,
+                        band_idx as u32,
+                        chunk_index as u64,
+                        &chunk_bytes,
+                    )?;
+                }
+
+                let done = progress_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                chunk_progress.set_position(done);
+
+                Ok(local_collectors)
+            }
+        )
+        .collect::<Result<Vec<_>, EncodingError>>()?;
+
+    chunk_progress.finish_with_message("processing chunk zones [done]");
+
+    let mut band_stats = Vec::with_capacity(band_count);
+    for (band_idx, dtype_name) in band_dtype_names.iter().enumerate() {
+        let mut main_collector = BandStatsCollector::new(band_idx as u32, dtype_name.clone());
+        main_collector.set_total_cells(encoded_num_cells);
+        for local_collectors in &results {
+            main_collector.merge(&local_collectors[band_idx]);
         }
-
-        let chunk_bytes = match band_type {
-            GdalDataType::UInt8 => process_band_data!(u8),
-            GdalDataType::Int8 => process_band_data!(i8),
-            GdalDataType::UInt16 => process_band_data!(u16),
-            GdalDataType::Int16 => process_band_data!(i16),
-            GdalDataType::UInt32 => process_band_data!(u32),
-            GdalDataType::Int32 => process_band_data!(i32),
-            GdalDataType::UInt64 => process_band_data!(u64),
-            GdalDataType::Int64 => process_band_data!(i64),
-            GdalDataType::Float32 => process_band_data!(f32),
-            GdalDataType::Float64 => process_band_data!(f64),
-            _ => Err(EncodingError::GeoTiff(format!(
-                "unsupported GDAL data type: {band_type:?}"
-            ))),
-        }?;
-
-        band_stats.push(collector.finish());
-
-        backend.create_level(
-            refinement_level.get() as u32,
-            band_index as u32,
-            encoded_num_cells,
-            chunk_size,
-        )?;
-
-        chunk_bytes
-            .par_iter()
-            .enumerate()
-            .try_for_each(|(chunk_index, bytes)| {
-                backend.write_chunk(
-                    refinement_level.get() as u32,
-                    band_index as u32,
-                    chunk_index as u64,
-                    bytes,
-                )
-            })?;
+        band_stats.push(main_collector.finish());
     }
 
     let report = ConversionReport {
