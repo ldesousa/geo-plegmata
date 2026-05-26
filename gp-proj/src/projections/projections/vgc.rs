@@ -14,7 +14,8 @@ use crate::{
         layout::traits::Layout,
         polyhedron::{ArcLengths, Polyhedron},
         projections::traits::{DistortionMetrics, ForwardCartesian, Projection},
-    }, utils::shape::triangle,
+    },
+    utils::shape::triangle,
 };
 use geo::{Coord, Point};
 
@@ -23,7 +24,7 @@ use geo::{Coord, Point};
 // to the midpoints of each edge. All 6 sub-triangles are congruent right triangles.
 // Arc lengths measured on the unit sphere for one sub-triangle:
 //   ab (corner to mid) = 0.553574 rad
-//   bc (corner to center) = 0.652358 rad  
+//   bc (corner to center) = 0.652358 rad
 //   ac (mid to center) = 0.364864 rad
 // Template is built with B (corner) at origin, A (mid) on negative x-axis,
 // C (center) placed using law of cosines at B:
@@ -35,9 +36,9 @@ use geo::{Coord, Point};
 // All coordinates multiplied by 1.018606 to match spherical sub-triangle area.
 const SCALE_SUB: f64 = 1.018606;
 const SUB_TRIANGLE_TEMPLATE: [(f64, f64); 3] = [
-    (0.0,                           0.0),        // B = corner (origin)
-    (-0.553574 * SCALE_SUB,         0.0),        // A = mid
-    ( 0.540930 * SCALE_SUB,         0.364645 * SCALE_SUB), // C = center
+    (0.0, 0.0),                                   // B = corner (origin)
+    (-0.553574 * SCALE_SUB, 0.0),                 // A = mid
+    (0.540930 * SCALE_SUB, 0.364645 * SCALE_SUB), // C = center
 ];
 // FACE_TEMPLATE_UP and FACE_TEMPLATE_DOWN
 // Edge lengths come from the regular icosahedron on a unit sphere:
@@ -51,16 +52,15 @@ const SUB_TRIANGLE_TEMPLATE: [(f64, f64); 3] = [
 // ensuring the equal-area property is preserved when mapping to the face plane.
 const SCALE_FACE: f64 = 1.0880715;
 const FACE_TEMPLATE_UP: [(f64, f64); 3] = [
-    (0.0,                          0.0),
-    (-1.107149 * SCALE_FACE,       0.0),
-    (-0.553574 * SCALE_FACE,       0.958819 * SCALE_FACE),
+    (0.0, 0.0),
+    (-1.107149 * SCALE_FACE, 0.0),
+    (-0.553574 * SCALE_FACE, 0.958819 * SCALE_FACE),
 ];
 const FACE_TEMPLATE_DOWN: [(f64, f64); 3] = [
-    (0.0,                          0.0),
-    (-1.107149 * SCALE_FACE,       0.0),
-    (-0.553574 * SCALE_FACE,      -0.958819 * SCALE_FACE),
+    (0.0, 0.0),
+    (-1.107149 * SCALE_FACE, 0.0),
+    (-0.553574 * SCALE_FACE, -0.958819 * SCALE_FACE),
 ];
-
 
 /// Implementation for Vertex Great Circle projection (or van Leeuwen Great Circle projection).
 /// vgc - Vertex-oriented Great Circle projection.
@@ -154,6 +154,7 @@ impl Projection for Vgc {
                             y: p_y_face * r,
                         },
                         face: index + 1,
+                        sub_triangle_id,
                     });
 
                     // in case the point is on the edge of two faces, we return the first face.
@@ -164,8 +165,91 @@ impl Projection for Vgc {
         out
     }
 
-    fn cartesian_to_geo(&self, _coords: Vec<Coord>) -> Point {
-        todo!()
+    fn cartesian_to_geo(
+        &self,
+        positions: Vec<ForwardCartesian>,
+        polyhedron: Option<&Polyhedron>,
+    ) -> Vec<Point> {
+        let mut out: Vec<Point> = vec![];
+        let polyhedron = polyhedron.unwrap();
+        let coef_fourier_auth_to_geod =
+            Self::fourier_coefficients(KarneyCoefficients::AUTHALIC_TO_GEODETIC);
+        let r = 6371007.181_f64;
+
+        for position in positions {
+            let face = usize::from(position.face);
+            let sub_triangle_id = position.sub_triangle_id;
+
+            // STEP 1: divide out radius
+            let p_x_face = position.coords.x / r;
+            let p_y_face = position.coords.y / r;
+
+            // STEP 2: get face template and sub-triangle vertices in face space
+            let is_upward = face % 2 == 0;
+            let face_template = if is_upward {
+                FACE_TEMPLATE_UP
+            } else {
+                FACE_TEMPLATE_DOWN
+            };
+            let sub_vertices_in_face =
+                get_subtriangle_vertices_in_face(sub_triangle_id, face_template);
+
+            // STEP 3: inverse affine — face space → sub-triangle template space
+            let (p_x_local, p_y_local) = affine_transform_triangle(
+                (p_x_face, p_y_face),
+                sub_vertices_in_face, // ← source and dest swapped vs forward
+                SUB_TRIANGLE_TEMPLATE,
+            );
+
+            // STEP 4: recover xy and uv from p_local
+            // p_local = B + xy * (D - B)  where D = C + uv * (A - C)
+            // B = SUB_TRIANGLE_TEMPLATE[1], A = SUB_TRIANGLE_TEMPLATE[0], C = SUB_TRIANGLE_TEMPLATE[2]
+            let b = SUB_TRIANGLE_TEMPLATE[1];
+            let a = SUB_TRIANGLE_TEMPLATE[0];
+            let c = SUB_TRIANGLE_TEMPLATE[2];
+
+            // xy = distance(p_local, B) / distance(D, B)
+            // First recover xy from the direction B→p_local vs B→A direction
+            let bp_x = p_x_local - b.0;
+            let bp_y = p_y_local - b.1;
+            let ba_x = a.0 - b.0;
+            let ba_y = a.1 - b.1;
+
+            // xy is the parameter along B→D, recover it via projection
+            let xy = (bp_x * ba_x + bp_y * ba_y) / (ba_x * ba_x + ba_y * ba_y);
+
+            // D = p_local interpolated back: D = B + xy*(D-B) → D = p_local/xy + B*(1-1/xy)...
+            // simpler: D = (p_local - B*(1-xy)) / xy...
+            // Actually: p_local = B + xy*(D-B) → D = B + (p_local-B)/xy
+            let pd_x = b.0 + (p_x_local - b.0) / xy;
+            let pd_y = b.1 + (p_y_local - b.1) / xy;
+
+            // D = C + uv*(A-C) → uv = (D-C)/(A-C)
+            let ac_x = a.0 - c.0;
+            let ac_y = a.1 - c.1;
+            let uv = ((pd_x - c.0) * ac_x + (pd_y - c.1) * ac_y) / (ac_x * ac_x + ac_y * ac_y);
+
+            // STEP 5: recover arc lengths from xy and uv
+            // get sub-triangle 3D vertices
+            let sub_triangle_3d = triangle_by_id(polyhedron, face, sub_triangle_id);
+            let ArcLengths {
+                ab, bc, ac: ac_len, ..
+            } = polyhedron.arc_lengths(sub_triangle_3d, Vector3D::zero());
+
+            // inverse slice_and_dice: recover ap and bp
+            let [ap, bp] = inverse_slice_and_dice(ac_len, ab, bc, xy, uv);
+
+            // STEP 6: reconstruct 3D point from sub-triangle vertices and arc lengths
+            let point_p = reconstruct_point(sub_triangle_3d, ap, bp);
+
+            // STEP 7: 3D → authalic lat/lon → geodetic lat/lon
+            let lat_auth = point_p.z.asin();
+            let lon = point_p.y.atan2(point_p.x);
+            let lat_geod = Self::lat_authalic_to_geodetic(lat_auth, &coef_fourier_auth_to_geod);
+
+            out.push(Point::new(lon.to_degrees(), lat_geod.to_degrees()));
+        }
+        out
     }
 
     // @TODO - Needs to be reviewed
@@ -311,8 +395,14 @@ fn affine_transform_triangle(
     dest_tri: [(f64, f64); 3],
 ) -> (f64, f64) {
     // Source vectors relative to source_tri[0]
-    let (ax, ay) = (source_tri[1].0 - source_tri[0].0, source_tri[1].1 - source_tri[0].1);
-    let (bx, by) = (source_tri[2].0 - source_tri[0].0, source_tri[2].1 - source_tri[0].1);
+    let (ax, ay) = (
+        source_tri[1].0 - source_tri[0].0,
+        source_tri[1].1 - source_tri[0].1,
+    );
+    let (bx, by) = (
+        source_tri[2].0 - source_tri[0].0,
+        source_tri[2].1 - source_tri[0].1,
+    );
 
     // Destination vectors relative to dest_tri[0]
     let (cx, cy) = (dest_tri[1].0 - dest_tri[0].0, dest_tri[1].1 - dest_tri[0].1);
@@ -332,6 +422,126 @@ fn affine_transform_triangle(
     let y = dest_tri[0].1 + s * cy + t * dy;
 
     (x, y)
+}
+
+/// Get the 3D sub-triangle vertices directly from face and sub-triangle ID,
+/// without needing the point. Returns [mid, corner, center] in 3D.
+pub fn triangle_by_id(polyhedron: &Polyhedron, face: usize, sub_triangle_id: u8) -> [Vector3D; 3] {
+    let verts = polyhedron.face_vertices(face).unwrap();
+    let [v0, v1, v2] = [verts[0], verts[1], verts[2]];
+    let center = polyhedron.face_center(face);
+
+    let mid_01 = (v0 + v1).normalize();
+    let mid_12 = (v1 + v2).normalize();
+    let mid_20 = (v2 + v0).normalize();
+
+    // Same order as get_subtriangle_vertices_in_face: [mid, corner, center]
+    match sub_triangle_id {
+        0 => [mid_01, v0, center],
+        1 => [mid_01, v1, center],
+        2 => [mid_12, v1, center],
+        3 => [mid_12, v2, center],
+        4 => [mid_20, v2, center],
+        5 => [mid_20, v0, center],
+        _ => panic!("Invalid sub_triangle_id: {}", sub_triangle_id),
+    }
+}
+
+pub fn inverse_slice_and_dice(
+    ac: f64,
+    ab: f64,
+    bc: f64,
+    xy_target: f64,
+    uv_target: f64,
+) -> [f64; 2] {
+    // Numerical inversion via Newton's method
+    // We search for (ap, bp) such that slice_and_dice(ac,ab,bc,ap,bp) = [xy_target, uv_target]
+
+    // Initial guess: linear approximation
+    let mut ap = xy_target * ab;
+    let mut bp = uv_target * bc;
+
+    let eps = 1e-10_f64;
+    let h = 1e-7_f64; // finite difference step
+
+    for _ in 0..50 {
+        let [xy, uv] = slice_and_dice(ac, ab, bc, ap, bp);
+
+        let r_xy = xy - xy_target;
+        let r_uv = uv - uv_target;
+
+        // converged?
+        if r_xy.abs() < eps && r_uv.abs() < eps {
+            break;
+        }
+
+        // Jacobian via finite differences
+        let [xy_ap, uv_ap] = slice_and_dice(ac, ab, bc, ap + h, bp);
+        let [xy_bp, uv_bp] = slice_and_dice(ac, ab, bc, ap, bp + h);
+
+        let d_xy_ap = (xy_ap - xy) / h;
+        let d_uv_ap = (uv_ap - uv) / h;
+        let d_xy_bp = (xy_bp - xy) / h;
+        let d_uv_bp = (uv_bp - uv) / h;
+
+        // 2x2 Jacobian:
+        // | d_xy_ap  d_xy_bp | | delta_ap |   | r_xy |
+        // | d_uv_ap  d_uv_bp | | delta_bp | = | r_uv |
+
+        let det = d_xy_ap * d_uv_bp - d_xy_bp * d_uv_ap;
+        if det.abs() < 1e-14 {
+            break; // singular, can't continue
+        }
+
+        let delta_ap = (r_xy * d_uv_bp - r_uv * d_xy_bp) / det;
+        let delta_bp = (d_xy_ap * r_uv - d_uv_ap * r_xy) / det;
+
+        ap = (ap - delta_ap).clamp(0.0, ab);
+        bp = (bp - delta_bp).clamp(0.0, bc);
+    }
+
+    [ap, bp]
+}
+
+/// Reconstruct a 3D unit vector on the sphere given a sub-triangle
+/// [mid=A, corner=B, center=C] and arc lengths ap (B→P) and bp (along AC direction).
+///
+/// Strategy:
+/// 1. Find point D on AC at parameter uv: D = slerp(A, C, uv)
+/// 2. Find point P on BD at parameter xy: P = slerp(B, D, xy)
+pub fn reconstruct_point(sub_triangle: [Vector3D; 3], ap: f64, bp: f64) -> Vector3D {
+    let [a, b, c] = sub_triangle; // [mid, corner, center]
+
+    // We need uv and xy, but we have ap and bp (arc lengths)
+    // ap = xy * ab, bp = uv * bc
+    let ab = a.dot(b);
+    let bc = b.dot(c);
+
+    let xy = (ap / ab).clamp(0.0, 1.0);
+    let uv = (bp / bc).clamp(0.0, 1.0);
+
+    // D = slerp(A, C, uv)
+    let d = slerp(a, c, uv);
+
+    // P = slerp(B, D, xy)
+    slerp(b, d, xy)
+}
+
+/// Spherical linear interpolation between two unit vectors at parameter t ∈ [0,1].
+pub fn slerp(a: Vector3D, b: Vector3D, t: f64) -> Vector3D {
+    let dot = a.dot(b).clamp(-1.0, 1.0);
+    let omega = dot.acos();
+
+    if omega.abs() < 1e-10 {
+        // Vectors are nearly identical, linear interpolation is fine
+        return (a * (1.0 - t) + b * t).normalize();
+    }
+
+    let sin_omega = omega.sin();
+    let scale_a = ((1.0 - t) * omega).sin() / sin_omega;
+    let scale_b = (t * omega).sin() / sin_omega;
+
+    (a * scale_a + b * scale_b).normalize()
 }
 
 // @TODO - new tests need to be added.

@@ -65,6 +65,15 @@ pub fn main() -> () {
         distortion.angular_deformation
     );
     println!("Areal scale: {} (expected: ~1.0)", distortion.areal_scale);
+
+    let forward = projection.geo_to_cartesian(vec![Point::new(-9.494, 38.685)], Some(&icosahedron), None);
+    let inverse = projection.cartesian_to_geo(forward, Some(&icosahedron));
+    println!("original:  lat=38.685, lon=-9.494");
+    println!(
+        "recovered: lat={:.6}, lon={:.6}",
+        inverse[0].y(),
+        inverse[0].x()
+    );
 }
 
 
