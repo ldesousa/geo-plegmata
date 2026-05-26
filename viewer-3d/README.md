@@ -7,7 +7,7 @@ This is a simple visualization app for the GP encoding project. It allows you to
 
 To build and run the visualization app, follow these steps:
 
-1. Make sure you have all the dependencies from Tauri installed on your system. You can find the prerequisites [here](https://tauri.app/start/prerequisites/).
+1. Make sure to install all the Tauri dependencies on your system. You can find the prerequisites [here](https://tauri.app/start/prerequisites/).
 
 2. Install the node dependencies by running the following command in the terminal:
 
