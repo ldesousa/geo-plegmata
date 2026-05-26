@@ -1,6 +1,6 @@
 # Visualization App
 
-This is a simple visualization app for the GP encoding project. It allows you to visualize the results of the GP encoding library directly in a desktop application. The visualization app is built using Tauri, and it uses deck.gl for rendering the visualizations.
+This is a simple visualization app for the GP encoding project. It allows to visualize the results of the GP encoding library directly in a desktop application. The visualization app is built using Tauri, and it uses deck.gl for rendering the grids.
 
 
 ## Building and Running
