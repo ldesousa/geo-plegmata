@@ -51,9 +51,9 @@ pub fn main() {
     let zone1 = system.zone_from_point(level, p1);
     let mut unbundled = unbundle_index(zone1);
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
-    assert_eq!(unbundled.0, 0);
+    assert_eq!(unbundled.0, 1);
     assert_eq!(unbundled.1, 1);   
-    assert_eq!(unbundled.2, 10);
+    assert_eq!(unbundled.2, 1);
     assert_eq!(unbundled.3, 3);   
 
     println!("Point 2 {} {}", p2.x(), p2.y());
@@ -62,17 +62,17 @@ pub fn main() {
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
     assert_eq!(unbundled.0, 1);
     assert_eq!(unbundled.1, 4);   
-    assert_eq!(unbundled.2, 10);
+    assert_eq!(unbundled.2, 1);
     assert_eq!(unbundled.3, 3);  
 
-   // println!("Point 3 {} {}", p3.x(), p3.y());
-   // let zone3 = system.zone_from_point(level, p3);
-   // unbundled = unbundle_index(zone3);
-   // println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
-   // assert_eq!(unbundled.0, 5);
-   // assert_eq!(unbundled.1, 4);   
-   // assert_eq!(unbundled.2, 19); // <-- Must be wrong
-   // assert_eq!(unbundled.3, 3);   
+    println!("Point 3 {} {}", p3.x(), p3.y());
+    let zone3 = system.zone_from_point(level, p3);
+    unbundled = unbundle_index(zone3);
+    println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
+    assert_eq!(unbundled.0, 0);
+    assert_eq!(unbundled.1, 3);   
+    assert_eq!(unbundled.2, 3); 
+    assert_eq!(unbundled.3, 3);   
 
     println!("Point 4 {} {}", p4.x(), p4.y());
     let zone4 = system.zone_from_point(level, p4);
@@ -80,16 +80,16 @@ pub fn main() {
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
     assert_eq!(unbundled.0, 7);
     assert_eq!(unbundled.1, 1);   
-    assert_eq!(unbundled.2, 10);
+    assert_eq!(unbundled.2, 2);
     assert_eq!(unbundled.3, 3);   
 
     println!("Point 5 {} {}", p5.x(), p5.y());
     let zone5 = system.zone_from_point(level, p5);
     unbundled = unbundle_index(zone5);
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
-    assert_eq!(unbundled.0, 5);
-    assert_eq!(unbundled.1, 1);   
-    assert_eq!(unbundled.2, 8);
+    assert_eq!(unbundled.0, 0);
+    assert_eq!(unbundled.1, 6);   
+    assert_eq!(unbundled.2, 9);
     assert_eq!(unbundled.3, 3);   
     
 //    let level = RefinementLevel::new(4).unwrap();

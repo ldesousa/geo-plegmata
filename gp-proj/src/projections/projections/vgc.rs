@@ -155,6 +155,7 @@ impl Projection for Vgc {
                             y: p_y_face * r,
                         },
                         face: index + 1,
+                        triangle: sub_vertices_in_face 
                     });
 
                     // in case the point is on the edge of two faces, we return the first face.
