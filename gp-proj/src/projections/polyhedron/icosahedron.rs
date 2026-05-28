@@ -19,9 +19,9 @@ use super::polyhedron::Polyhedron;
 /// Factory function to create an icosahedron with the given orientation.
 ///
 /// `orientation` specifies where vertex 0 (the top vertex, tip of the five top
-/// triangles) is placed on the globe.  Use `Orientation::DGGS_OPTIMAL` for the
-/// standard land-avoiding placement, or `Orientation::POLAR` for the canonical
-/// mathematical alignment with a vertex at each pole.
+/// triangles) is placed on the globe. Use Orientation::DGGS_OPTIMAL for the 
+/// standard land-avoiding placement (with one vertex positioned on land) or Orientation::POLAR for the
+/// canonical mathematical alignment with a vertex at each pole.
 pub fn new(orientation: Orientation) -> Polyhedron {
     let vertices = create_vertices(orientation);
     let faces = create_faces();
