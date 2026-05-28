@@ -56,8 +56,9 @@ impl Orientation {
     /// Vertex 0 at the geographic north pole — the canonical mathematical orientation.
     pub const POLAR: Self = Self { lat_deg: 90.0, lon_deg: 0.0 };
 
-    /// DGGS-optimal orientation: vertex 0 at 58.397145907431°N 11.20°E (over the ocean).
-    /// Avoids placing singularities over populated land and minimises distortion for
-    /// land-based queries.
+    /// DGGS-optimal icosahedron orientation.
+    /// Places the first vertex over the ocean near Sweden (58.397145907431°N, 11.20°E)
+    /// to avoid placing icosahedron singularities over major land areas.
+    /// The orientation is symmetric about the equator and closely follows the ISEA orientation proposed by Sahr (2003), with a small westward shift so that only a single vertex falls on land.
     pub const DGGS_OPTIMAL: Self = Self { lat_deg: 58.397145907431, lon_deg: 11.20 };
 }
