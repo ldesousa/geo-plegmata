@@ -7,19 +7,21 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::str::FromStr;
 
 use gdal::raster::GdalDataType;
 use gdal::spatial_ref::{CoordTransform, SpatialRef};
 use gdal::{Dataset, GeoTransformEx};
 use geoplegma::api::DggrsApiConfig;
 use geoplegma::get;
-use geoplegma::types::{BoundingBox, DggrsUid, Point, RefinementLevel, RelativeDepth};
+use geoplegma::types::{BoundingBox, DggrsUid, Point, RefinementLevel, RelativeDepth, ZoneId};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 
 use crate::AttributeSchema;
-use crate::common::CONFIG;
+use crate::common::{CONFIG, ID_ONLY_CONFIG};
 use crate::error::EncodingError;
 use crate::models::{Compression, DataType, DatasetMetadata};
 use crate::stats::{BandStatsCollector, ConversionReport, SourceRasterReport};
@@ -671,3 +673,475 @@ where
 
     Ok((backend, source_report, report))
 }
+
+pub fn convert_dggrs_store_to_backend<B>(
+    source_store_path: &Path,
+    output_path: &Path,
+    target_dggrs: DggrsUid,
+    compression: Option<Compression>,
+) -> Result<B, EncodingError>
+where
+    B: StorageBackend,
+{
+    let source_backend = B::open(source_store_path)?;
+    let source_metadata = source_backend.metadata();
+    let source_dggrs = source_metadata.dggrs;
+
+    let source_grid = get(source_dggrs)
+        .map_err(|e| EncodingError::Grid(format!("failed to resolve source DGGS: {e}")))?;
+    let target_grid = get(target_dggrs)
+        .map_err(|e| EncodingError::Grid(format!("failed to resolve target DGGS: {e}")))?;
+
+    let source_levels = source_backend.levels();
+    if source_levels.is_empty() {
+        return Err(EncodingError::Storage("source store has no resolution levels".into()));
+    }
+
+    let mut level_mapping = Vec::new();
+    let mut target_levels = Vec::new();
+
+    for &src_lvl in &source_levels {
+        let src_ref_lvl = RefinementLevel::new(src_lvl as i32)?;
+        let src_count = source_grid.zone_count(src_ref_lvl)?;
+
+        let mut best_level = target_grid.min_refinement_level()?;
+        let mut best_diff = u64::MAX;
+        for l in target_grid.min_refinement_level()?.get()..=target_grid.max_refinement_level()?.get() {
+            let level = RefinementLevel::new(l)?;
+            let count = target_grid.zone_count(level)?;
+            let diff = src_count.abs_diff(count);
+            if diff < best_diff {
+                best_diff = diff;
+                best_level = level;
+            }
+        }
+        let tgt_lvl = best_level.get() as u32;
+        level_mapping.push((src_lvl, tgt_lvl));
+        target_levels.push(tgt_lvl);
+    }
+
+    target_levels.sort_unstable();
+    target_levels.dedup();
+
+    println!("Mapping levels from {} to {}:", source_dggrs, target_dggrs);
+    for &(src, tgt) in &level_mapping {
+        println!("  Source Level {} -> Target Level {}", src, tgt);
+    }
+
+    let max_target_level_u32 = target_levels.iter().max().copied().unwrap_or(0);
+    let max_target_level = RefinementLevel::new(max_target_level_u32 as i32)?;
+
+    let data_type_size_bytes = source_metadata.attributes
+        .iter()
+        .map(|band| band.dtype.byte_size())
+        .max()
+        .ok_or_else(|| {
+            EncodingError::Storage("dataset metadata must define at least one attribute".into())
+        })?;
+
+    let target_min_chunk_level = target_grid.min_refinement_level()?;
+    let target_max_relative_depth_allowed = target_grid.max_relative_depth()?;
+
+    let (_best_chunk_level, chunk_size) = choose_best_chunk_level_and_size(
+        max_target_level,
+        target_min_chunk_level,
+        target_max_relative_depth_allowed,
+        target_dggrs.spec().aperture as u64,
+        data_type_size_bytes,
+    )?;
+
+    let target_compression = compression.or_else(|| source_metadata.compression.clone());
+
+    let target_metadata = DatasetMetadata {
+        dggrs: target_dggrs,
+        attributes: source_metadata.attributes.clone(),
+        chunk_size,
+        levels: target_levels.clone(),
+        compression: target_compression,
+    };
+
+    let mut target_backend = B::create(output_path, target_metadata)?;
+
+    for &(source_level, target_level) in &level_mapping {
+        println!("\nConverting Level {source_level} -> {target_level}...");
+
+        let (source_chunk_level_u32, source_chunk_ids) = source_backend.chunk_ids_for_level(source_level)?;
+        if source_chunk_ids.is_empty() {
+            println!("  Warning: source level {source_level} has no chunk IDs, skipping.");
+            continue;
+        }
+
+        let mut min_lon = f64::INFINITY;
+        let mut max_lon = f64::NEG_INFINITY;
+        let mut min_lat = f64::INFINITY;
+        let mut max_lat = f64::NEG_INFINITY;
+        let mut has_any = false;
+
+        for chunk_id_str in &source_chunk_ids {
+            let chunk_zone_id = ZoneId::from_str(chunk_id_str)?;
+            let zones = source_grid.zone_from_id(chunk_zone_id, Some(DggrsApiConfig {
+                region: true,
+                center: false,
+                vertex_count: false,
+                children: false,
+                neighbors: false,
+                area_sqm: false,
+                densify: false,
+            }))?;
+            if let Some(zone) = zones.zones.first() {
+                if let Some(region) = &zone.region {
+                    for pt in &region.exterior {
+                        min_lon = min_lon.min(pt.lon);
+                        max_lon = max_lon.max(pt.lon);
+                        min_lat = min_lat.min(pt.lat);
+                        max_lat = max_lat.max(pt.lat);
+                        has_any = true;
+                    }
+                }
+            }
+        }
+
+        let bbox = if has_any {
+            let lon_padding = (max_lon - min_lon) * 0.01;
+            let lat_padding = (max_lat - min_lat) * 0.01;
+            let min_lon = (min_lon - lon_padding).max(-180.0);
+            let max_lon = (max_lon + lon_padding).min(180.0);
+            let min_lat = (min_lat - lat_padding).max(-90.0);
+            let max_lat = (max_lat + lat_padding).min(90.0);
+
+            let tolerance = 1e-4;
+            let is_global = (min_lon <= -180.0 + tolerance)
+                && (max_lon >= 180.0 - tolerance)
+                && (min_lat <= -90.0 + tolerance)
+                && (max_lat >= 90.0 - tolerance);
+            if is_global {
+                None
+            } else {
+                Some(BoundingBox::new(min_lon, min_lat, max_lon, max_lat))
+            }
+        } else {
+            None
+        };
+
+        let (target_chunk_level, target_level_chunk_size) = choose_best_chunk_level_and_size(
+            RefinementLevel::new(target_level as i32)?,
+            target_min_chunk_level,
+            target_max_relative_depth_allowed,
+            target_dggrs.spec().aperture as u64,
+            data_type_size_bytes,
+        )?;
+
+        let target_chunk_zones = target_grid.zones_from_bbox(target_chunk_level, bbox, Some(CONFIG))?;
+        if target_chunk_zones.zones.is_empty() {
+            return Err(EncodingError::Grid(
+                "no target zones found intersecting bounding box".into(),
+            ));
+        }
+        let target_chunk_ids: Vec<String> = target_chunk_zones
+            .zones
+            .iter()
+            .map(|z| z.id.to_string())
+            .collect();
+
+        target_backend.set_level_chunk_ids(
+            target_level,
+            target_chunk_level.get() as u32,
+            target_chunk_ids.clone(),
+        )?;
+
+        let encoded_num_cells = (target_chunk_ids.len() as u64)
+            .checked_mul(target_level_chunk_size)
+            .ok_or_else(|| EncodingError::Storage("encoded cell count overflow".into()))?;
+
+        let band_count = source_backend.band_count();
+        for band_idx in 0..band_count {
+            target_backend.create_level(
+                target_level,
+                band_idx,
+                encoded_num_cells,
+                target_level_chunk_size,
+            )?;
+        }
+
+        let source_chunk_level = RefinementLevel::new(source_chunk_level_u32 as i32)?;
+        let source_relative_depth = RelativeDepth::new(source_level as i32 - source_chunk_level.get())?;
+
+        println!("  Building source cell lookup index...");
+        let mut source_cell_to_index = HashMap::new();
+        for (chunk_idx, chunk_id_str) in source_chunk_ids.iter().enumerate() {
+            let chunk_zone_id = ZoneId::from_str(chunk_id_str)?;
+            let children = source_grid.zones_from_parent(
+                source_relative_depth,
+                chunk_zone_id,
+                Some(ID_ONLY_CONFIG),
+            )?;
+            for (in_chunk_idx, child) in children.zones.iter().enumerate() {
+                source_cell_to_index.insert(child.id.clone(), (chunk_idx, in_chunk_idx));
+            }
+        }
+        let fill_value_bytes: Vec<Vec<u8>> = target_backend
+            .metadata()
+            .attributes
+            .iter()
+            .map(|attr| {
+                let fill_val = match &attr.fill_value {
+                    Some(value) => parse_fill_value_to_f64(&attr.dtype, value)?,
+                    None => 0.0,
+                };
+                encode_value_from_f64(&attr.dtype, fill_val)
+            })
+            .collect::<Result<_, EncodingError>>()?;
+
+        let total_target_chunks = target_chunk_ids.len();
+        let chunk_progress = ProgressBar::new(total_target_chunks as u64);
+        let style = ProgressStyle::with_template(
+            "  Resampling chunks [{bar:40.cyan/blue}] {pos}/{len} ({percent}%)",
+        )
+        .map_err(|e| EncodingError::Storage(format!("invalid progress bar template: {e}")))?
+        .progress_chars("=> ");
+        chunk_progress.set_style(style);
+
+        let progress_counter = std::sync::atomic::AtomicU64::new(0);
+        let target_relative_depth = RelativeDepth::new(target_level as i32 - target_chunk_level.get())?;
+        let center_config = DggrsApiConfig {
+            center: true,
+            ..CONFIG
+        };
+
+        target_chunk_ids
+            .par_iter()
+            .enumerate()
+            .try_for_each(|(target_chunk_idx, target_chunk_id_str)| -> Result<(), EncodingError> {
+                let target_chunk_zone_id = ZoneId::from_str(target_chunk_id_str)?;
+                let children = target_grid.zones_from_parent(
+                    target_relative_depth,
+                    target_chunk_zone_id,
+                    Some(center_config),
+                )?;
+
+                if children.zones.len() > target_level_chunk_size as usize {
+                    return Err(EncodingError::Grid(format!(
+                        "target chunk {target_chunk_id_str} has {} children but chunk_size is {target_level_chunk_size}",
+                        children.zones.len()
+                    )));
+                }
+
+                let mut band_chunk_bytes: Vec<Vec<u8>> = (0..band_count)
+                    .map(|band_idx| {
+                        let dtype = &target_backend.metadata().attributes[band_idx as usize].dtype;
+                        let val_size = dtype.byte_size();
+                        let fill_bytes = &fill_value_bytes[band_idx as usize];
+                        let mut chunk_bytes = vec![0_u8; target_level_chunk_size as usize * val_size];
+                        for cell_idx in 0..target_level_chunk_size as usize {
+                            let start = cell_idx * val_size;
+                            let end = start + val_size;
+                            chunk_bytes[start..end].copy_from_slice(fill_bytes);
+                        }
+                        chunk_bytes
+                    })
+                    .collect();
+
+                let source_refinement_level = RefinementLevel::new(source_level as i32)?;
+
+                let mut required_src_chunks = HashSet::new();
+                for target_cell in &children.zones {
+                    let center = target_cell.center.ok_or_else(|| {
+                        EncodingError::Grid(format!(
+                            "target zone {} has no center coordinates",
+                            target_cell.id
+                        ))
+                    })?;
+
+                    let source_zones = source_grid.zone_from_point(
+                        source_refinement_level,
+                        center,
+                        Some(ID_ONLY_CONFIG),
+                    )?;
+
+                    if let Some(source_zone) = source_zones.zones.first() {
+                        if let Some(&(src_chunk_idx, _)) = source_cell_to_index.get(&source_zone.id) {
+                            required_src_chunks.insert(src_chunk_idx);
+                        }
+                    }
+                }
+
+                let mut local_src_chunks = HashMap::with_capacity(required_src_chunks.len());
+                for &src_chunk_idx in &required_src_chunks {
+                    let mut bands_data = Vec::with_capacity(band_count as usize);
+                    for band_idx in 0..band_count {
+                        let chunk = source_backend.read_chunk(source_level, band_idx, src_chunk_idx as u64)?;
+                        bands_data.push(chunk);
+                    }
+                    local_src_chunks.insert(src_chunk_idx, bands_data);
+                }
+
+                for (in_chunk_idx, target_cell) in children.zones.iter().enumerate() {
+                    let center = target_cell.center.ok_or_else(|| {
+                        EncodingError::Grid(format!(
+                            "target zone {} has no center coordinates",
+                            target_cell.id
+                        ))
+                    })?;
+
+                    let source_zones = source_grid.zone_from_point(
+                        source_refinement_level,
+                        center,
+                        Some(ID_ONLY_CONFIG),
+                    )?;
+
+                    if let Some(source_zone) = source_zones.zones.first() {
+                        if let Some(&(src_chunk_idx, src_in_chunk_idx)) = source_cell_to_index.get(&source_zone.id) {
+                            if let Some(bands_data) = local_src_chunks.get(&src_chunk_idx) {
+                                for band_idx in 0..band_count {
+                                    let dtype = &target_backend.metadata().attributes[band_idx as usize].dtype;
+                                    let val_size = dtype.byte_size();
+                                    let src_chunk = &bands_data[band_idx as usize];
+
+                                    let src_start = src_in_chunk_idx * val_size;
+                                    let src_end = src_start + val_size;
+                                    if src_chunk.len() < src_end {
+                                        return Err(EncodingError::Storage(format!(
+                                            "source chunk {src_chunk_idx} is too small"
+                                        )));
+                                    }
+
+                                    let target_start = in_chunk_idx * val_size;
+                                    let target_end = target_start + val_size;
+                                    band_chunk_bytes[band_idx as usize][target_start..target_end]
+                                        .copy_from_slice(&src_chunk[src_start..src_end]);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for band_idx in 0..band_count {
+                    target_backend.write_chunk(
+                        target_level,
+                        band_idx,
+                        target_chunk_idx as u64,
+                        &band_chunk_bytes[band_idx as usize],
+                    )?;
+                }
+
+                let done = progress_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                chunk_progress.set_position(done);
+
+                Ok(())
+            })?;
+
+        chunk_progress.finish_with_message("  Resampling complete");
+    }
+
+    Ok(target_backend)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::path::PathBuf;
+    use crate::zarr::ZarrBackend;
+    use crate::query::query_value_for_point;
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("gp_encoding_{name}_{nanos}"))
+    }
+
+    #[test]
+    fn test_convert_dggrs_store_to_backend_resamples_correctly() {
+        let src_store_path = unique_temp_dir("dggrs_convert_src");
+        let tgt_store_path = unique_temp_dir("dggrs_convert_tgt");
+
+        // 1. Create a source Zarr store (H3)
+        let dggrs_src = DggrsUid::H3;
+        let grid_src = get(dggrs_src).expect("resolve src dggrs");
+        let src_refinement_level = RefinementLevel::new(1).expect("src refinement level");
+        let src_chunk_level = RefinementLevel::new(0).expect("src chunk level");
+        let src_chunk_size = u64::from(dggrs_src.spec().aperture);
+
+        let src_chunk_zones = grid_src
+            .zones_from_bbox(src_chunk_level, None, Some(ID_ONLY_CONFIG))
+            .expect("src chunk zones");
+        assert!(!src_chunk_zones.zones.is_empty(), "expected source chunk zones");
+
+        let src_chunk0_id = src_chunk_zones.zones[0].id.clone();
+        
+        let mut child_config = ID_ONLY_CONFIG;
+        child_config.center = true;
+        
+        let src_children = grid_src
+            .zones_from_parent(RelativeDepth::new_const(1), src_chunk0_id.clone(), Some(child_config))
+            .expect("src children");
+        assert!(!src_children.zones.is_empty(), "expected source children");
+
+        let src_metadata = DatasetMetadata {
+            dggrs: dggrs_src,
+            attributes: vec![AttributeSchema {
+                dtype: DataType::Float32,
+                fill_value: Some("0.0".to_string()),
+            }],
+            chunk_size: src_chunk_size,
+            levels: vec![src_refinement_level.get() as u32],
+            compression: None,
+        };
+
+        let mut src_backend = ZarrBackend::create(&src_store_path, src_metadata).expect("create src zarr");
+        src_backend
+            .set_level_chunk_ids(
+                src_refinement_level.get() as u32,
+                src_chunk_level.get() as u32,
+                vec![src_chunk0_id.to_string()],
+            )
+            .expect("set src chunk ids");
+        src_backend
+            .create_level(src_refinement_level.get() as u32, 0, src_chunk_size, src_chunk_size)
+            .expect("create src level");
+
+        let chunk_values = vec![42.0_f32; src_chunk_size as usize];
+        let chunk_bytes: Vec<u8> = chunk_values
+            .into_iter()
+            .flat_map(f32::to_ne_bytes)
+            .collect();
+        src_backend
+            .write_chunk(src_refinement_level.get() as u32, 0, 0, &chunk_bytes)
+            .expect("write src chunk");
+
+        // Use the center point of one child cell
+        let target_center_pt = src_children.zones[0].center.expect("expected center point");
+
+        // 2. Convert from H3 to IVEA3H
+        let dggrs_tgt = DggrsUid::IVEA3H;
+        let tgt_backend: ZarrBackend = convert_dggrs_store_to_backend(
+            &src_store_path,
+            &tgt_store_path,
+            dggrs_tgt,
+            None,
+        )
+        .expect("convert dggrs store");
+
+        assert_eq!(tgt_backend.metadata().dggrs, dggrs_tgt);
+        assert_eq!(tgt_backend.metadata().attributes.len(), 1);
+        assert_eq!(tgt_backend.metadata().attributes[0].dtype, DataType::Float32);
+
+        // 3. Query a point in the target backend to see if it resampled correctly
+        let tgt_levels = tgt_backend.levels();
+        assert!(!tgt_levels.is_empty(), "target levels should not be empty");
+        let tgt_level = RefinementLevel::new(tgt_levels[0] as i32).expect("tgt level");
+
+        let res_bytes = query_value_for_point(&tgt_backend, tgt_level, 0, target_center_pt)
+            .expect("query value on target store");
+        let value = f32::from_ne_bytes([res_bytes[0], res_bytes[1], res_bytes[2], res_bytes[3]]);
+        
+        assert_eq!(value, 42.0);
+
+        let _ = std::fs::remove_dir_all(&src_store_path);
+        let _ = std::fs::remove_dir_all(&tgt_store_path);
+    }
+}
+
+

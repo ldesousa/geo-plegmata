@@ -12,8 +12,8 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 use geoplegma::types::{DggrsUid, Point, RefinementLevel};
 use gp_encoding::{
-    Compression, StorageBackend, ZarrBackend, convert_geotiff_file_to_backend, format_value,
-    query_value_for_point,
+    Compression, StorageBackend, ZarrBackend, convert_dggrs_store_to_backend,
+    convert_geotiff_file_to_backend, format_value, query_value_for_point,
 };
 
 #[derive(Parser, Debug)]
@@ -29,8 +29,8 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Convert a GeoTIFF file into a Zarr-backed encoded dataset.
-    ConvertGeotiff(ConvertGeotiffArgs),
+    /// Convert a GeoTIFF file or existing DGGRS Zarr store into a Zarr-backed encoded dataset.
+    Convert(ConvertArgs),
     /// Add a coarser resolution level by aggregating an existing level.
     AddLevel(AddLevelArgs),
     /// Query a value at geographic coordinates.
@@ -40,15 +40,15 @@ enum Commands {
 }
 
 #[derive(Args, Debug)]
-struct ConvertGeotiffArgs {
+struct ConvertArgs {
     /// DGGRS to use for the output dataset.
     #[arg(short, long)]
     dggrs: DggrsUid,
-    /// Input GeoTIFF path.
+    /// Input GeoTIFF path or existing Zarr store directory path.
     #[arg(short, long)]
     input: PathBuf,
     /// Output Zarr store path.
-    #[arg(short, long, default_value = "./tmp/gp_encoding_geotiff_convert")]
+    #[arg(short, long, default_value = "./tmp/gp_encoding_convert")]
     output: PathBuf,
     /// Optional compression for Zarr chunks.
     #[arg(long, value_enum)]
@@ -101,7 +101,7 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::ConvertGeotiff(args) => run_convert_geotiff(args),
+        Commands::Convert(args) => run_convert(args),
         Commands::AddLevel(args) => run_add_level(args),
         Commands::Query(args) => run_query(args),
         Commands::Stats(args) => run_stats(args),
@@ -113,7 +113,7 @@ fn main() {
     }
 }
 
-fn run_convert_geotiff(args: ConvertGeotiffArgs) -> Result<(), String> {
+fn run_convert(args: ConvertArgs) -> Result<(), String> {
     if args.output.exists() {
         std::fs::remove_dir_all(&args.output).map_err(|e| {
             format!(
@@ -123,8 +123,27 @@ fn run_convert_geotiff(args: ConvertGeotiffArgs) -> Result<(), String> {
         })?;
     }
 
-    let (backend, source_report, conversion_report) =
-        convert_geotiff_file_to_backend::<ZarrBackend>(
+    if args.input.is_file() {
+        let (backend, source_report, conversion_report) =
+            convert_geotiff_file_to_backend::<ZarrBackend>(
+                &args.input,
+                &args.output,
+                args.dggrs,
+                args.compression,
+            )
+            .map_err(|e| e.to_string())?;
+
+        println!("Conversion successful");
+        println!("  Input (GeoTIFF): {}", args.input.display());
+        println!("  Output:          {}", args.output.display());
+        println!("  Levels:          {:?}", backend.levels());
+
+        if args.report {
+            print!("{source_report}");
+            print!("{conversion_report}");
+        }
+    } else if args.input.is_dir() {
+        let backend = convert_dggrs_store_to_backend::<ZarrBackend>(
             &args.input,
             &args.output,
             args.dggrs,
@@ -132,14 +151,15 @@ fn run_convert_geotiff(args: ConvertGeotiffArgs) -> Result<(), String> {
         )
         .map_err(|e| e.to_string())?;
 
-    println!("Conversion successful");
-    println!("  Input:      {}", args.input.display());
-    println!("  Output:     {}", args.output.display());
-    println!("  Levels:     {:?}", backend.levels());
-
-    if args.report {
-        print!("{source_report}");
-        print!("{conversion_report}");
+        println!("Conversion successful");
+        println!("  Input (Zarr):    {}", args.input.display());
+        println!("  Output:          {}", args.output.display());
+        println!("  Levels:          {:?}", backend.levels());
+    } else {
+        return Err(format!(
+            "input path does not exist or is invalid: {}",
+            args.input.display()
+        ));
     }
 
     Ok(())

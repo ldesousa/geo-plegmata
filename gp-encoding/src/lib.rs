@@ -20,7 +20,7 @@ pub mod zarr;
 pub use geoplegma::api::DggrsApi;
 pub use geoplegma::types::{BoundingBox, RefinementLevel, RelativeDepth, Zone, ZoneId, Zones};
 
-pub use geotiff_convert::{compute_source_report, convert_geotiff_file_to_backend};
+pub use geotiff_convert::{compute_source_report, convert_geotiff_file_to_backend, convert_dggrs_store_to_backend};
 pub use models::{AttributeSchema, Compression, DataType, DatasetMetadata};
 pub use query::{
     VisualizationCell, export_level_as_visualization_json, query_value_by_cell_index,
