@@ -19,10 +19,30 @@ use gp_proj::{
     },
     utils::shape::cartesian_to_barycentric,
 };
-pub struct IVEA3HBary {}
+
+pub struct IVEA3HBary {
+
+    refinement_level: RefinementLevel,
+    denominator: u32,
+}
 
 #[allow(dead_code)]
 impl IVEA3HBary {
+
+    pub fn new(refinement_level: RefinementLevel) -> Self {
+
+        Self {
+            refinement_level: refinement_level,
+            denominator: Self::compute_denom(refinement_level),
+        }
+    }
+
+    pub fn set_refinement_level(&mut self, refinement_level: RefinementLevel) {
+
+        self.refinement_level = refinement_level;
+        self.denominator = Self::compute_denom(refinement_level);
+    }
+
     // Denominator is a power of the APERTURE, but only increases every other resolution.
     fn compute_denom(refinement_level: RefinementLevel) -> u32 {
         return Self::APERTURE
@@ -46,16 +66,71 @@ impl IVEA3HBary {
         return d1.powi(2) + d2.powi(2) + d1 * d2;
     }
 
+    fn find_nearest_zone_centre(&self, bary: (f64, f64)) -> (u32, u32) {
+
+        let mut zone_centre = (1 as u32, 1 as u32); // the result
+
+        let mut candidates: Vec<(u32, u32)> = Vec::new();
+        
+        let j_down = (bary.1 * self.denominator as f64).floor() as u32;
+        let j_up = (bary.1 * self.denominator as f64).ceil() as u32;
+
+        // Odd case
+        if (self.refinement_level.get() % 2) > 0 {
+            let start_down = j_down % Self::APERTURE;
+            let start_up = j_up % Self::APERTURE;
+            let num_hops = (bary.0 * self.denominator as f64 / Self::APERTURE as f64).floor() as u32; // integer division
+            let i_down: u32 = start_down + num_hops * Self::APERTURE;
+            let i_up: u32 = start_up + num_hops * Self::APERTURE;
+            candidates.push((i_down, j_down));
+            candidates.push((i_down + Self::APERTURE, j_down));
+            candidates.push((i_up, j_up));
+            candidates.push((i_up + Self::APERTURE, j_up));
+            println!("Candidates i {} {}", i_down, i_up);
+        }
+        // Even case
+        else {
+            let i_down: u32 = (bary.0 * self.denominator as f64).floor() as u32;
+            let i_up: u32 = (bary.0 * self.denominator as f64).ceil() as u32;
+            candidates.push((i_down, j_down));
+            candidates.push((i_down, j_up));
+            candidates.push((i_up, j_down));
+            candidates.push((i_up, j_up));
+            println!("Candidates i {} {}", i_down, i_up);
+        }
+
+        println!("Candidates {:?}", candidates);
+
+        // Find closest cell centre
+        let mut current_dist = f64::MAX;
+        while candidates.len() > 0 {
+            let centre = candidates.pop().unwrap();
+            let dist = Self::bary_distance(
+                f64::from(centre.0) / f64::from(self.denominator),
+                bary.0,
+                f64::from(centre.1) / f64::from(self.denominator),
+                bary.1,
+            );
+            if dist < current_dist {
+                current_dist = dist;
+                zone_centre = centre;
+            }
+        }
+        
+        println!("Winner {:?}", zone_centre);
+        return zone_centre;
+    }
+
     // Determines face to be enconded in index for edge cases, i.e. cells/zones spaning two or more
     // icosahedron faces. Guarantees each cell/zone has only one index.
-    fn edge_cases(mut i: u32, mut j: u32, mut face: i32, denom: u32) -> (u32, u32, i32) {
+    fn edge_cases(&self, mut i: u32, mut j: u32, mut face: i32) -> (u32, u32, i32) {
         let mut zero = false;
         let mut swap = false;
-        let k = denom - i - j;
+        let k = self.denominator - i - j;
 
         // top-most row of faces
         if face < 10 && (face % 2) > 0 {
-            if j == denom {
+            if j == self.denominator {
                 face = 1;
             }
             // top-most pentagon
@@ -71,17 +146,17 @@ impl IVEA3HBary {
         }
         // middle row of faces pointing "downwards"
         else if face < 11 && (face % 2) == 0 {
-            if j == denom
+            if j == self.denominator
             // bottom pentagon
             {
                 face = face + 10;
                 zero = true;
-            } else if k == denom
+            } else if k == self.denominator
             // left-most pentagon
             {
                 face = face - 1;
                 zero = true;
-            } else if i == denom
+            } else if i == self.denominator
             // right-most pentagon
             {
                 face = face + 1;
@@ -102,7 +177,7 @@ impl IVEA3HBary {
         }
         // middle row of faces pointing "upwards"
         else if face < 20 && (face % 2) > 0 {
-            if j == denom
+            if j == self.denominator
             // top-most pentagon
             {
                 face = face - 8;
@@ -115,7 +190,7 @@ impl IVEA3HBary {
             {
                 face = face + 1;
                 zero = true;
-            } else if i == denom
+            } else if i == self.denominator
             // right-most pentagon
             {
                 face = face + 3;
@@ -136,7 +211,7 @@ impl IVEA3HBary {
         } else
         // botom row of faces
         {
-            if j == denom {
+            if j == self.denominator {
                 face = 12;
             }
             // bottom pentagon
@@ -169,7 +244,7 @@ impl DggrsSysApi for IVEA3HBary {
 
     fn zone_from_point(
         &self,
-        refinement_level: RefinementLevel,
+        _refinement_level: RefinementLevel,
         point: Point,
         //config: Option<DggrsApiConfig>,
     ) -> u64 {
@@ -192,78 +267,17 @@ impl DggrsSysApi for IVEA3HBary {
 
         println!("Barycentric: {:?}", bary);
 
-        let denom = IVEA3HBary::compute_denom(refinement_level);
-
-        let mut zone_centre = (1 as u32, 1 as u32); // the result
-
-        let mut candidates: Vec<(u32, u32)> = Vec::new();
-        
-//        let i_down = (bary.0 * denom as f64).floor() as u32;
-//        let i_up = (bary.0 * denom as f64).ceil() as u32;
-
-        let j_down = (bary.1 * denom as f64).floor() as u32;
-        let j_up = (bary.1 * denom as f64).ceil() as u32;
-
-//        candidates.push((i_down, j_down));
-//        candidates.push((i_down, j_up));
-//        candidates.push((i_up, j_down));
-//        candidates.push((i_up, j_up));
-
-        //println!("Candidates j {} {}", j_down, j_up);
-
-        // Odd case
-        if (refinement_level.get() % 2) > 0 {
-            let start_down = j_down % Self::APERTURE;
-            let start_up = j_up % Self::APERTURE;
-            let num_hops = (bary.0 * denom as f64 / Self::APERTURE as f64).floor() as u32; // integer division
-            let i_down: u32 = start_down + num_hops * Self::APERTURE;
-            let i_up: u32 = start_up + num_hops * Self::APERTURE;
-            candidates.push((i_down, j_down));
-            candidates.push((i_down + Self::APERTURE, j_down));
-            candidates.push((i_up, j_up));
-            candidates.push((i_up + Self::APERTURE, j_up));
-            println!("Candidates i {} {}", i_down, i_up);
-        }
-        // Even case
-        else {
-            let i_down: u32 = (bary.0 * denom as f64).floor() as u32;
-            let i_up: u32 = (bary.0 * denom as f64).ceil() as u32;
-            candidates.push((i_down, j_down));
-            candidates.push((i_down, j_up));
-            candidates.push((i_up, j_down));
-            candidates.push((i_up, j_up));
-            println!("Candidates i {} {}", i_down, i_up);
-        }
-
-        println!("Candidates {:?}", candidates);
-
-        // Find closest cell centre
-        let mut current_dist = f64::MAX;
-        while candidates.len() > 0 {
-            let centre = candidates.pop().unwrap();
-            let dist = Self::bary_distance(
-                f64::from(centre.0) / f64::from(denom),
-                bary.0,
-                f64::from(centre.1) / f64::from(denom),
-                bary.1,
-            );
-            if dist < current_dist {
-                current_dist = dist;
-                zone_centre = centre;
-            }
-        }
-        
-        println!("Winner {:?}", zone_centre);
+        let zone_centre = IVEA3HBary::find_nearest_zone_centre(self, bary);
 
         // Bundle coords into index
         // bundle_index(zone_centre.0, zone_centre.1, refinement_level, bary.3);
         // return zone_centre;
-        let unique = IVEA3HBary::edge_cases(zone_centre.0, zone_centre.1, face, denom);
+        let unique = IVEA3HBary::edge_cases(self, zone_centre.0, zone_centre.1, face);
         println!("After edge cases: {:?}", unique);
         return unique.0 as u64 +                        // i
                unique.1 as u64 * 2_u64.pow(26) as u64 + // j
                unique.2 as u64 * 2_u64.pow(52) as u64 + // face
-               refinement_level.get() as u64 * 2_u64.pow(57) as u64;
+               self.refinement_level.get() as u64 * 2_u64.pow(57) as u64;
     }
 }
 

@@ -43,8 +43,8 @@ pub fn main() {
     let p5 = Point::new(-9.49420, 38.68499);
 
 
-    let system = IVEA3HBary {};
     let level = RefinementLevel::new(3).unwrap();
+    let system = IVEA3HBary::new(level);
 
     println!("== Resolution 3 ==");
     println!("Point 1 {} {}", p1.x(), p1.y());
