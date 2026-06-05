@@ -10,8 +10,7 @@
 
 use crate::sys_api::DggrsSysApi;
 use geo::Point;
-//use api::error::DggrsError;
-use geoplegma::types::RefinementLevel; //, Zones};
+use geoplegma::types::RefinementLevel; 
 use gp_proj::{
     projections::{
         polyhedron::{icosahedron::new, spherical_geometry::barycentric_coordinates},
@@ -269,11 +268,10 @@ impl DggrsSysApi for IVEA3HBary {
 
         let zone_centre = IVEA3HBary::find_nearest_zone_centre(self, bary);
 
-        // Bundle coords into index
-        // bundle_index(zone_centre.0, zone_centre.1, refinement_level, bary.3);
-        // return zone_centre;
         let unique = IVEA3HBary::edge_cases(self, zone_centre.0, zone_centre.1, face);
         println!("After edge cases: {:?}", unique);
+
+        // Bundle index into 64 bit
         return unique.0 as u64 +                        // i
                unique.1 as u64 * 2_u64.pow(26) as u64 + // j
                unique.2 as u64 * 2_u64.pow(52) as u64 + // face
@@ -286,29 +284,48 @@ mod tests {
 
     use crate::impls::ivea3h_bary::IVEA3HBary;
     use crate::sys_api::DggrsSysApi;
-    use api::models::common::RefinementLevel;
-    use geo::Point;
+    use geoplegma::types::RefinementLevel;
 
     #[test]
     fn test_zone_from_point() {
-        let system = IVEA3HBary {};
+        // ToDo    
+    }
 
-        //let mut level = RefinementLevel::new(3).unwrap();
-        //let mut zone = system.zone_from_point(level, Point::new(0.45,0.22));
-        //assert_eq!(zone.0, 4);
-        //assert_eq!(zone.1, 1);
+    #[test]
+    fn test_find_nearest_zone_centre() {
+        
+        let mut system = IVEA3HBary::new(RefinementLevel::new(3).unwrap());
+        let bary1 = (0.21 as f64, 0.64 as f64);
+        let bary2 = (0.45 as f64, 0.22 as f64);
 
-        level = RefinementLevel::new(4).unwrap();
-        zone = system.zone_from_point(level, Point::new(0.21, 0.64));
-        let bary_i = zone % 2_u64.pow(26);
-        let mut tail: u64 = zone / 2_u64.pow(26);
-        let bary_j = tail % 2_u64.pow(26);
-        tail = tail / 2_u64.pow(26);
-        let face = tail % 2_u64.pow(5);
-        let level = tail / 2_u64.pow(5);
-        assert_eq!(bary_i, 2);
-        assert_eq!(bary_j, 6);
-        assert_eq!(face, 10);
-        assert_eq!(level, 4);
+
+        let mut centre = system.find_nearest_zone_centre(bary1);
+        assert_eq!(centre.0, 2);
+        assert_eq!(centre.1, 5);
+
+        centre = system.find_nearest_zone_centre(bary2);
+        assert_eq!(centre.0, 5); // ==> Verify this one !!!!
+        assert_eq!(centre.1, 2);
+        
+        system.set_refinement_level(RefinementLevel::new(4).unwrap());
+
+        centre = system.find_nearest_zone_centre(bary1);
+        assert_eq!(centre.0, 2);
+        assert_eq!(centre.1, 6);
+
+        centre = system.find_nearest_zone_centre(bary2);
+        assert_eq!(centre.0, 4);
+        assert_eq!(centre.1, 2);
+        
+        system.set_refinement_level(RefinementLevel::new(5).unwrap());
+
+        centre = system.find_nearest_zone_centre(bary1);
+        assert_eq!(centre.0, 5);
+        assert_eq!(centre.1, 17);
+
+        centre = system.find_nearest_zone_centre(bary2);
+        assert_eq!(centre.0, 12);
+        assert_eq!(centre.1, 6);
+
     }
 }
