@@ -13,7 +13,7 @@ use clap::{Args, Parser, Subcommand};
 use geoplegma::types::{DggrsUid, Point, RefinementLevel};
 use gp_encoding::{
     Compression, StorageBackend, ZarrBackend, convert_dggrs_store_to_backend,
-    convert_geotiff_file_to_backend, format_value, query_value_for_point,
+    convert_to_backend, format_value, query_value_for_point,
 };
 
 #[derive(Parser, Debug)]
@@ -29,7 +29,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Convert a GeoTIFF file or existing DGGRS Zarr store into a Zarr-backed encoded dataset.
+    /// Convert a GDAL-supported dataset or existing DGGRS Zarr store into a Zarr-backed encoded dataset.
     Convert(ConvertArgs),
     /// Add a coarser resolution level by aggregating an existing level.
     AddLevel(AddLevelArgs),
@@ -44,9 +44,12 @@ struct ConvertArgs {
     /// DGGRS to use for the output dataset.
     #[arg(short, long)]
     dggrs: DggrsUid,
-    /// Input GeoTIFF path or existing Zarr store directory path.
+    /// Input GDAL dataset path/connection string, or existing Zarr store directory path.
     #[arg(short, long)]
     input: PathBuf,
+    /// Optional subdataset variable name to select (for multi-variable formats like NetCDF/HDF5).
+    #[arg(long)]
+    subdataset: Option<String>,
     /// Output Zarr store path.
     #[arg(short, long, default_value = "./tmp/gp_encoding_convert")]
     output: PathBuf,
@@ -123,26 +126,10 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
         })?;
     }
 
-    if args.input.is_file() {
-        let (backend, source_report, conversion_report) =
-            convert_geotiff_file_to_backend::<ZarrBackend>(
-                &args.input,
-                &args.output,
-                args.dggrs,
-                args.compression,
-            )
-            .map_err(|e| e.to_string())?;
-
-        println!("Conversion successful");
-        println!("  Input (GeoTIFF): {}", args.input.display());
-        println!("  Output:          {}", args.output.display());
-        println!("  Levels:          {:?}", backend.levels());
-
-        if args.report {
-            print!("{source_report}");
-            print!("{conversion_report}");
+    if args.input.is_dir() {
+        if args.subdataset.is_some() {
+            return Err("Cannot specify --subdataset when converting an existing Zarr store directory.".to_string());
         }
-    } else if args.input.is_dir() {
         let backend = convert_dggrs_store_to_backend::<ZarrBackend>(
             &args.input,
             &args.output,
@@ -156,10 +143,28 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
         println!("  Output:          {}", args.output.display());
         println!("  Levels:          {:?}", backend.levels());
     } else {
-        return Err(format!(
-            "input path does not exist or is invalid: {}",
-            args.input.display()
-        ));
+        let (backend, source_report, conversion_report) =
+            convert_to_backend::<ZarrBackend>(
+                &args.input.to_string_lossy(),
+                args.subdataset.as_deref(),
+                &args.output,
+                args.dggrs,
+                args.compression,
+            )
+            .map_err(|e| e.to_string())?;
+
+        println!("Conversion successful");
+        println!("  Input (GDAL):    {}", args.input.display());
+        if let Some(sub) = &args.subdataset {
+            println!("  Subdataset:      {}", sub);
+        }
+        println!("  Output:          {}", args.output.display());
+        println!("  Levels:          {:?}", backend.levels());
+
+        if args.report {
+            print!("{source_report}");
+            print!("{conversion_report}");
+        }
     }
 
     Ok(())

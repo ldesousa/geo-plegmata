@@ -13,7 +13,7 @@ use std::str::FromStr;
 
 use gdal::raster::GdalDataType;
 use gdal::spatial_ref::{CoordTransform, SpatialRef};
-use gdal::{Dataset, GeoTransformEx};
+use gdal::{Dataset, GeoTransformEx, Metadata};
 use geoplegma::api::DggrsApiConfig;
 use geoplegma::get;
 use geoplegma::types::{BoundingBox, DggrsUid, Point, RefinementLevel, RelativeDepth, ZoneId};
@@ -122,7 +122,7 @@ fn nearest_pixel_coord_for_center(
     height: usize,
 ) -> Result<Option<(usize, usize)>, EncodingError> {
     if width == 0 || height == 0 {
-        return Err(EncodingError::GeoTiff(
+        return Err(EncodingError::Dataset(
             "raster has zero width or height".into(),
         ));
     }
@@ -134,7 +134,7 @@ fn nearest_pixel_coord_for_center(
 
     let det = gt[1] * gt[5] - gt[2] * gt[4];
     if det.abs() < f64::EPSILON {
-        return Err(EncodingError::GeoTiff(
+        return Err(EncodingError::Dataset(
             "geotransform is not invertible".into(),
         ));
     }
@@ -164,7 +164,7 @@ fn get_closest_refinement_level(
     pixel_height: f64,
 ) -> Result<RefinementLevel, EncodingError> {
     if pixel_width == 0.0 || pixel_height == 0.0 {
-        return Err(EncodingError::GeoTiff(
+        return Err(EncodingError::Dataset(
             "geotransform has zero pixel size".into(),
         ));
     }
@@ -311,8 +311,46 @@ pub fn compute_source_report(dataset: &Dataset) -> Result<SourceRasterReport, En
     })
 }
 
-pub fn convert_geotiff_file_to_backend<B>(
-    geotiff_path: &Path,
+pub fn list_subdatasets(dataset: &Dataset) -> Vec<(String, String)> {
+    let mut subdatasets = Vec::new();
+    if let Some(domain) = dataset.metadata_domain("SUBDATASETS") {
+        let mut name_map = std::collections::BTreeMap::new();
+        let mut desc_map = std::collections::BTreeMap::new();
+        for item in domain {
+            if let Some((key, value)) = item.split_once('=') {
+                if key.starts_with("SUBDATASET_") {
+                    if key.ends_with("_NAME") {
+                        if let Some(num_str) = key.strip_prefix("SUBDATASET_").and_then(|k| k.strip_suffix("_NAME")) {
+                            if let Ok(num) = num_str.parse::<usize>() {
+                                name_map.insert(num, value.to_string());
+                            }
+                        }
+                    } else if key.ends_with("_DESC") {
+                        if let Some(num_str) = key.strip_prefix("SUBDATASET_").and_then(|k| k.strip_suffix("_DESC")) {
+                            if let Ok(num) = num_str.parse::<usize>() {
+                                desc_map.insert(num, value.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (num, name) in name_map {
+            let desc = desc_map.get(&num).cloned().unwrap_or_default();
+            subdatasets.push((name, desc));
+        }
+    }
+    subdatasets
+}
+
+pub fn get_subdataset_short_name(name: &str) -> String {
+    let last_part = name.split(':').last().unwrap_or(name);
+    last_part.trim_matches(|c| c == '/' || c == '"' || c == '\'' || c == ' ').to_string()
+}
+
+pub fn convert_to_backend<B>(
+    input_str: &str,
+    subdataset: Option<&str>,
     output_path: &Path,
     dggrs: DggrsUid,
     compression: Option<Compression>,
@@ -320,21 +358,62 @@ pub fn convert_geotiff_file_to_backend<B>(
 where
     B: StorageBackend,
 {
-    if !geotiff_path.exists() {
-        return Err(EncodingError::GeoTiff(format!(
-            "input GeoTIFF does not exist: {}",
-            geotiff_path.display()
-        )));
-    }
-    if !geotiff_path.is_file() {
-        return Err(EncodingError::GeoTiff(format!(
-            "input GeoTIFF is not a file: {}",
-            geotiff_path.display()
-        )));
-    }
     let grid = get(dggrs)?;
 
-    let dataset = Dataset::open(geotiff_path)?;
+    let initial_dataset = Dataset::open(input_str).map_err(|e| {
+        EncodingError::Dataset(format!(
+            "failed to open input dataset '{}': {e}",
+            input_str
+        ))
+    })?;
+
+    let subdatasets = list_subdatasets(&initial_dataset);
+    let (dataset, open_str) = if !subdatasets.is_empty() {
+        if let Some(sub) = subdataset {
+            let matched = subdatasets.iter().find(|(name, _)| {
+                let short_name = get_subdataset_short_name(name);
+                short_name.eq_ignore_ascii_case(sub) || name.to_lowercase().contains(&sub.to_lowercase())
+            });
+            if let Some((name, _)) = matched {
+                let ds = Dataset::open(name).map_err(|e| {
+                    EncodingError::Dataset(format!(
+                        "failed to open subdataset '{}': {e}",
+                        name
+                    ))
+                })?;
+                (ds, name.clone())
+            } else {
+                let mut msg = format!(
+                    "Subdataset '{}' not found in input. Available subdatasets:\n",
+                    sub
+                );
+                for (name, desc) in &subdatasets {
+                    let short_name = get_subdataset_short_name(name);
+                    msg.push_str(&format!("  - {} ({})\n", short_name, desc));
+                }
+                return Err(EncodingError::Dataset(msg));
+            }
+        } else {
+            let mut msg = format!(
+                "Input dataset '{}' contains multiple subdatasets. Please specify one using --subdataset <name>.\nAvailable subdatasets:\n",
+                input_str
+            );
+            for (name, desc) in &subdatasets {
+                let short_name = get_subdataset_short_name(name);
+                msg.push_str(&format!("  - {} ({})\n", short_name, desc));
+            }
+            return Err(EncodingError::Dataset(msg));
+        }
+    } else {
+        if let Some(sub) = subdataset {
+            return Err(EncodingError::Dataset(format!(
+                "Input dataset does not contain subdatasets, but --subdataset '{}' was specified.",
+                sub
+            )));
+        }
+        (initial_dataset, input_str.to_string())
+    };
+
     let source_report = compute_source_report(&dataset)?;
 
     let bands = dataset
@@ -356,7 +435,7 @@ where
                 GdalDataType::Float32 => DataType::Float32,
                 GdalDataType::Float64 => DataType::Float64,
                 _ => {
-                    return Err(EncodingError::GeoTiff(format!(
+                    return Err(EncodingError::Dataset(format!(
                         "unsupported GDAL data type: {band_type:?}"
                     )));
                 }
@@ -378,7 +457,7 @@ where
     let (width, height) = dataset.raster_size();
 
     if width == 0 || height == 0 {
-        return Err(EncodingError::GeoTiff(
+        return Err(EncodingError::Dataset(
             "raster has zero width or height".into(),
         ));
     }
@@ -486,7 +565,7 @@ where
 
     let progress_counter = std::sync::atomic::AtomicU64::new(0);
 
-    let geotiff_path_buf = geotiff_path.to_path_buf();
+    let open_str_clone = open_str.clone();
 
     let results: Vec<Vec<BandStatsCollector>> = chunk_zones
         .zones
@@ -503,14 +582,14 @@ where
                     gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder,
                 );
                 let transform = CoordTransform::new(&wgs84, &src_srs)?;
-                let thread_dataset = Dataset::open(&geotiff_path_buf)?;
+                let thread_dataset = Dataset::open(&open_str_clone)?;
                 Ok((transform, thread_dataset))
             },
             |state, (chunk_index, chunk_zone)| {
                 let (wgs84_to_src, thread_dataset) = match state {
                     Ok(s) => s,
                     Err(e) => {
-                        return Err(EncodingError::GeoTiff(format!(
+                        return Err(EncodingError::Dataset(format!(
                             "failed to initialize thread-local transform/dataset: {e}"
                         )));
                     }
@@ -629,7 +708,7 @@ where
                             GdalDataType::Int64 => process_window!(i64),
                             GdalDataType::Float32 => process_window!(f32),
                             GdalDataType::Float64 => process_window!(f64),
-                            _ => return Err(EncodingError::GeoTiff(format!(
+                            _ => return Err(EncodingError::Dataset(format!(
                                 "unsupported GDAL data type: {band_type:?}"
                             ))),
                         }
@@ -1141,6 +1220,15 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&src_store_path);
         let _ = std::fs::remove_dir_all(&tgt_store_path);
+    }
+
+    #[test]
+    fn test_get_subdataset_short_name() {
+        assert_eq!(get_subdataset_short_name("NETCDF:\"file.nc\":elevation"), "elevation");
+        assert_eq!(get_subdataset_short_name("HDF5:\"file.h5\"://elevation"), "elevation");
+        assert_eq!(get_subdataset_short_name("NETCDF:\"/path/to/file.nc\":temp"), "temp");
+        assert_eq!(get_subdataset_short_name("simple_name"), "simple_name");
+        assert_eq!(get_subdataset_short_name("HDF5:file.h5:variable_with_spaces "), "variable_with_spaces");
     }
 }
 
