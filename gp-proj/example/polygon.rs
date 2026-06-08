@@ -9,7 +9,7 @@
 
 use geo::Point;
 use gp_proj::projections::{
-    polyhedron::icosahedron::new,
+    polyhedron::{icosahedron, Orientation},
     projections::{traits::Projection, vgc::Vgc},
 };
 
@@ -26,7 +26,7 @@ pub fn main() -> () {
     let p6 = Point::new(-9.192722996293583, 38.72423364219293);
 
     let projection = Vgc;
-    let icosahedron = new();
+    let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
     let coords = projection.geo_to_face(vec![p1, p2, p3, p4, p5, p6], Some(&icosahedron));
 
     println!("{:?}", coords);

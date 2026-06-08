@@ -39,3 +39,26 @@ pub struct ArcLengths {
     pub bp: f64,
     pub cp: f64,
 }
+
+/// Orientation of a polyhedron on the unit sphere, expressed as the geographic
+/// position (in degrees) where vertex 0 is placed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Orientation {
+    pub lat_deg: f64,
+    pub lon_deg: f64,
+}
+
+impl Orientation {
+    pub fn new(lat_deg: f64, lon_deg: f64) -> Self {
+        Self { lat_deg, lon_deg }
+    }
+
+    /// Vertex 0 at the geographic north pole — the canonical mathematical orientation.
+    pub const POLAR: Self = Self { lat_deg: 90.0, lon_deg: 0.0 };
+
+    /// DGGS-optimal icosahedron orientation.
+    /// Places the first vertex over the ocean near Sweden (58.397145907431°N, 11.20°E)
+    /// to avoid placing icosahedron singularities over major land areas.
+    /// The orientation is symmetric about the equator and closely follows the ISEA orientation proposed by Sahr (2003), with a small westward shift so that only a single vertex falls on land.
+    pub const DGGS_OPTIMAL: Self = Self { lat_deg: 58.397145907431, lon_deg: 11.20 };
+}
