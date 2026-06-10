@@ -145,7 +145,16 @@ impl Projection for Vgc {
                         SUB_TRIANGLE_TEMPLATE,
                         sub_vertices_in_face,
                     );
-
+println!("ab={:.10} bc={:.10} ac={:.10}", ab, bc, ac);
+println!("ap={:.10} bp={:.10}", ap, bp);
+println!("xy={:.10} uv={:.10}", xy, uv);
+println!("p_local=({:.10}, {:.10})", p_x_local, p_y_local);
+println!("sub_triangle_id={}", sub_triangle_id);
+println!("sub_triangle_3d: mid=({:.6},{:.6},{:.6}) corner=({:.6},{:.6},{:.6}) center=({:.6},{:.6},{:.6})",
+    sub_triangle_3d.0[0].x, sub_triangle_3d.0[0].y, sub_triangle_3d.0[0].z,
+    sub_triangle_3d.0[1].x, sub_triangle_3d.0[1].y, sub_triangle_3d.0[1].z,
+    sub_triangle_3d.0[2].x, sub_triangle_3d.0[2].y, sub_triangle_3d.0[2].z,
+);
                     // Authalic radius
                     let r = self.radius;
                     out.push(ForwardCartesian {
@@ -208,26 +217,22 @@ impl Projection for Vgc {
             let a = SUB_TRIANGLE_TEMPLATE[0];
             let c = SUB_TRIANGLE_TEMPLATE[2];
 
-            // xy = distance(p_local, B) / distance(D, B)
-            // First recover xy from the direction B→p_local vs B→A direction
-            let bp_x = p_x_local - b.0;
-            let bp_y = p_y_local - b.1;
-            let ba_x = a.0 - b.0;
-            let ba_y = a.1 - b.1;
+let bp_x = p_x_local - b.0;
+let bp_y = p_y_local - b.1;
+let ac_x = c.0 - a.0;
+let ac_y = c.1 - a.1;
 
-            // xy is the parameter along B→D, recover it via projection
-            let xy = (bp_x * ba_x + bp_y * ba_y) / (ba_x * ba_x + ba_y * ba_y);
+// B + t*(P-B) = A + s*(C-A)
+// t*bp_x - s*ac_x = a.0 - b.0
+// t*bp_y - s*ac_y = a.1 - b.1
+let rhs_x = a.0 - b.0;
+let rhs_y = a.1 - b.1;
+let det = bp_x * (-ac_y) - bp_y * (-ac_x);
+let t = (rhs_x * (-ac_y) - rhs_y * (-ac_x)) / det;  // xy
+let s = (bp_x * rhs_y - bp_y * rhs_x) / det;         // uv (parameter along A→C, so uv = 1-s... check)
 
-            // D = p_local interpolated back: D = B + xy*(D-B) → D = p_local/xy + B*(1-1/xy)...
-            // simpler: D = (p_local - B*(1-xy)) / xy...
-            // Actually: p_local = B + xy*(D-B) → D = B + (p_local-B)/xy
-            let pd_x = b.0 + (p_x_local - b.0) / xy;
-            let pd_y = b.1 + (p_y_local - b.1) / xy;
-
-            // D = C + uv*(A-C) → uv = (D-C)/(A-C)
-            let ac_x = a.0 - c.0;
-            let ac_y = a.1 - c.1;
-            let uv = ((pd_x - c.0) * ac_x + (pd_y - c.1) * ac_y) / (ac_x * ac_x + ac_y * ac_y);
+let xy = t;
+let uv = 1.0 - s;  // si
 
             // STEP 5: recover arc lengths from xy and uv
             // get sub-triangle 3D vertices
@@ -246,7 +251,10 @@ impl Projection for Vgc {
             let lat_auth = point_p.z.asin();
             let lon = point_p.y.atan2(point_p.x);
             let lat_geod = Self::lat_authalic_to_geodetic(lat_auth, &coef_fourier_auth_to_geod);
-
+println!("p_x_face={:.10} p_y_face={:.10}", p_x_face, p_y_face);
+println!("p_x_local={:.10} p_y_local={:.10}", p_x_local, p_y_local);
+println!("xy_recovered={:.10} uv_recovered={:.10}", xy, uv);
+println!("ap_recovered={:.10} bp_recovered={:.10}", ap, bp);
             out.push(Point::new(lon.to_degrees(), lat_geod.to_degrees()));
         }
         out
