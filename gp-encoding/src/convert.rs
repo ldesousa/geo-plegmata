@@ -60,7 +60,11 @@ fn get_corners_and_pixel_size(
     let h = height_px as f64;
 
     let gt = dataset.geo_transform()?;
-    let src_srs = dataset.spatial_ref()?;
+    let src_srs = dataset.spatial_ref().unwrap_or_else(|_| {
+        let mut srs = SpatialRef::from_epsg(4326).unwrap();
+        srs.set_axis_mapping_strategy(gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder);
+        srs
+    });
 
     let mut wgs84 = SpatialRef::from_epsg(4326)?;
     wgs84.set_axis_mapping_strategy(gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder);
@@ -372,7 +376,7 @@ where
         if let Some(sub) = subdataset {
             let matched = subdatasets.iter().find(|(name, _)| {
                 let short_name = get_subdataset_short_name(name);
-                short_name.eq_ignore_ascii_case(sub) || name.to_lowercase().contains(&sub.to_lowercase())
+                short_name.eq_ignore_ascii_case(sub) || short_name.to_lowercase().contains(&sub.to_lowercase())
             });
             if let Some((name, _)) = matched {
                 let ds = Dataset::open(name).map_err(|e| {
@@ -463,7 +467,11 @@ where
     }
 
     let gt = dataset.geo_transform()?;
-    let src_srs = dataset.spatial_ref()?;
+    let src_srs = dataset.spatial_ref().unwrap_or_else(|_| {
+        let mut srs = SpatialRef::from_epsg(4326).unwrap();
+        srs.set_axis_mapping_strategy(gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder);
+        srs
+    });
     let (bbox, pixel_width, pixel_height) = get_corners_and_pixel_size(&dataset)?;
     let refinement_level = get_closest_refinement_level(&grid, pixel_width, pixel_height)?;
 
