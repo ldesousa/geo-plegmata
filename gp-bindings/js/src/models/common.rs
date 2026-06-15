@@ -103,7 +103,7 @@ impl JsZones {
         coords.push(Point::new(self.region_coords[j], self.region_coords[j + 1]));
         j += 2;
       }
-      // let line_string: geoplegma::types::Point = );
+
       let region = Region::new(coords);
 
       // children
@@ -260,9 +260,6 @@ impl ZonesWrapper {
         area_sqm.push(area);
       }
     }
-
-    children_id_offsets.push(children_utf8_ids.len() as u32);
-    neighbors_id_offsets.push(neighbors_utf8_ids.len() as u32);
 
     JsZones {
       id_offsets,

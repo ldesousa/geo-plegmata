@@ -308,7 +308,7 @@ mod tests {
           children: true,
           neighbors: true,
           area_sqm: true,
-          densify: false,
+          densify: true,
         }),
       )
       .unwrap();
