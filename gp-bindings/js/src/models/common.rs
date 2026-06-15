@@ -6,10 +6,9 @@
 // <LICENCE-MIT or http://opensource.org/licenses/MIT>, at your
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
-use geo::{LineString, Point, Polygon};
+use geo::{LineString, Polygon};
+use geoplegma::types::{Point, Region, Zone, ZoneId, Zones};
 use napi_derive::napi;
-
-use api::models::common::{Zone, ZoneId, Zones};
 
 #[napi(object, js_name=Zone)]
 pub struct RustZone {
@@ -65,6 +64,8 @@ pub struct JsZones {
   pub neighbors_offsets: Vec<u32>,
   pub neighbors_id_offsets: Vec<u32>,
   pub neighbors_utf8_ids: Vec<u8>,
+
+  pub area_sqm: Vec<f64>,
 }
 
 #[napi]
@@ -99,11 +100,11 @@ impl JsZones {
       let mut coords = Vec::new();
       let mut j = region_start;
       while j + 1 < region_end {
-        coords.push((self.region_coords[j], self.region_coords[j + 1]));
+        coords.push(Point::new(self.region_coords[j], self.region_coords[j + 1]));
         j += 2;
       }
-      let line_string: LineString = coords.into();
-      let region: Polygon = Polygon::new(line_string, vec![]);
+      // let line_string: geoplegma::types::Point = );
+      let region = Region::new(coords);
 
       // children
       let c_start = self.children_offsets[i] as usize;
@@ -199,6 +200,9 @@ impl ZonesWrapper {
     let mut neighbors_offsets = Vec::new();
     let mut neighbors_id_offsets = Vec::new();
     let mut neighbors_utf8_ids = Vec::new();
+
+    let mut area_sqm = Vec::with_capacity(n);
+
     for zone in &self.inner.zones {
       // --- id ---
       // size of ids
@@ -212,8 +216,8 @@ impl ZonesWrapper {
       // --- center ---
 
       if let Some(c) = zone.center {
-        center_x.push(c.x());
-        center_y.push(c.y());
+        center_x.push(c.lon);
+        center_y.push(c.lat);
       }
       // --- vertex count ---
       if let Some(vc) = zone.vertex_count {
@@ -225,9 +229,9 @@ impl ZonesWrapper {
       // Use exterior ring points (you may want interior rings too depending on your data)
 
       if let Some(r) = &zone.region {
-        for coord in r.exterior().points() {
-          region_coords.push(coord.x());
-          region_coords.push(coord.y());
+        for coord in r.exterior.iter() {
+          region_coords.push(coord.lon);
+          region_coords.push(coord.lat);
         }
       }
       // --- children ---
@@ -251,6 +255,10 @@ impl ZonesWrapper {
           neighbors_utf8_ids.extend_from_slice(n.as_bytes());
         }
       }
+      // --- vertex count ---
+      if let Some(area) = zone.area_sqm {
+        area_sqm.push(area);
+      }
     }
 
     children_id_offsets.push(children_utf8_ids.len() as u32);
@@ -270,6 +278,7 @@ impl ZonesWrapper {
       neighbors_offsets,
       neighbors_id_offsets,
       neighbors_utf8_ids,
+      area_sqm,
     }
   }
 }
