@@ -56,6 +56,9 @@ struct ConvertGeotiffArgs {
     /// Print conversion statistics after a successful conversion.
     #[arg(long)]
     report: bool,
+    /// Limit the number of threads used.
+    #[arg(long)]
+    threads: Option<usize>,
 }
 
 #[derive(Args, Debug)]
@@ -123,14 +126,25 @@ fn run_convert_geotiff(args: ConvertGeotiffArgs) -> Result<(), String> {
         })?;
     }
 
-    let (backend, source_report, conversion_report) =
+    let convert_fn = || {
         convert_geotiff_file_to_backend::<ZarrBackend>(
             &args.input,
             &args.output,
             args.dggrs,
             args.compression,
         )
-        .map_err(|e| e.to_string())?;
+    };
+
+    let (backend, source_report, conversion_report) = if let Some(threads) = args.threads {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .map_err(|e| format!("failed to initialize rayon thread pool: {e}"))?;
+        pool.install(convert_fn)
+    } else {
+        convert_fn()
+    }
+    .map_err(|e| e.to_string())?;
 
     println!("Conversion successful");
     println!("  Input:      {}", args.input.display());
