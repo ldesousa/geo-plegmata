@@ -17,8 +17,7 @@ fn test_point_conversion() {
         "coordinates": [12.4924, 41.8902]
     });
 
-    let refinement_level = RefinementLevel::new(7).unwrap();
-    let doc = convert_to_document(geojson, DggrsUid::H3, refinement_level).unwrap();
+    let doc = convert_to_document(geojson, DggrsUid::H3, RefinementLevel::new_const(7)).unwrap();
 
     println!("Converted document: {}", doc);
     assert_eq!(doc["dggrs"], "H3");
@@ -38,8 +37,7 @@ fn test_linestring_conversion() {
         ]
     });
 
-    let refinement_level = RefinementLevel::new(7).unwrap();
-    let doc = convert_to_document(geojson, DggrsUid::H3, refinement_level).unwrap();
+    let doc = convert_to_document(geojson, DggrsUid::H3, RefinementLevel::new_const(7)).unwrap();
 
     println!("Converted document: {}", doc);
 
@@ -65,8 +63,7 @@ fn test_polygon_conversion() {
         ]
     });
 
-    let refinement_level = RefinementLevel::new(6).unwrap();
-    let doc = convert_to_document(geojson, DggrsUid::H3, refinement_level).unwrap();
+    let doc = convert_to_document(geojson, DggrsUid::H3, RefinementLevel::new_const(6)).unwrap();
 
     println!("Converted document: {}", doc);
 
@@ -98,8 +95,7 @@ fn test_feature_collection_conversion() {
         ]
     });
 
-    let refinement_level = RefinementLevel::new(7).unwrap();
-    let doc = convert_to_document(geojson, DggrsUid::H3, refinement_level).unwrap();
+    let doc = convert_to_document(geojson, DggrsUid::H3, RefinementLevel::new_const(7)).unwrap();
 
     println!("Converted document: {}", doc);
     assert_eq!(doc["type"], "FeatureCollection");
@@ -156,8 +152,7 @@ fn test_larger_feature_collection_conversion() {
     );
 
 
-    let refinement_level = RefinementLevel::new(7).unwrap();
-    let doc = convert_to_document(geojson, DggrsUid::H3, refinement_level).unwrap();
+    let doc = convert_to_document(geojson, DggrsUid::H3, RefinementLevel::new_const(7)).unwrap();
 
     println!("Converted document: {}", doc);
     assert_eq!(doc["type"], "FeatureCollection");
