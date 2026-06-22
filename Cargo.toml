@@ -9,3 +9,10 @@ authors = ["GeoPlegma Developers", "GeoInsight"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
 readme = "README.md"
+
+# Local override: the published dggal-0.0.6 branch does not build on macOS
+# (eC parser vs Clang block `^` syntax in SDK headers; hardcoded obj/linux/lib).
+# This worktree is dggal-0.0.6 (commit fb58cf05) with the macOS build fixes
+# applied to build.rs. Remove once the fixes land upstream.
+[patch."https://github.com/GeoPlegma/dggal-rust.git"]
+dggal-rust = { path = "../dggal-rust-0.0.6" }
