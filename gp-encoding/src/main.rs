@@ -59,6 +59,9 @@ struct ConvertArgs {
     /// Print conversion statistics after a successful conversion.
     #[arg(long)]
     report: bool,
+    /// Limit the number of threads used.
+    #[arg(long)]
+    threads: Option<usize>,
 }
 
 #[derive(Args, Debug)]
@@ -130,12 +133,25 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
         if args.subdataset.is_some() {
             return Err("Cannot specify --subdataset when converting an existing Zarr store directory.".to_string());
         }
-        let backend = convert_dggrs_store_to_backend::<ZarrBackend>(
-            &args.input,
-            &args.output,
-            args.dggrs,
-            args.compression,
-        )
+
+        let convert_fn = || {
+            convert_dggrs_store_to_backend::<ZarrBackend>(
+                &args.input,
+                &args.output,
+                args.dggrs,
+                args.compression,
+            )
+        };
+
+        let backend = if let Some(threads) = args.threads {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .map_err(|e| format!("failed to initialize rayon thread pool: {e}"))?;
+            pool.install(convert_fn)
+        } else {
+            convert_fn()
+        }
         .map_err(|e| e.to_string())?;
 
         println!("Conversion successful");
@@ -143,7 +159,7 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
         println!("  Output:          {}", args.output.display());
         println!("  Levels:          {:?}", backend.levels());
     } else {
-        let (backend, source_report, conversion_report) =
+        let convert_fn = || {
             convert_to_backend::<ZarrBackend>(
                 &args.input.to_string_lossy(),
                 args.subdataset.as_deref(),
@@ -151,7 +167,18 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
                 args.dggrs,
                 args.compression,
             )
-            .map_err(|e| e.to_string())?;
+        };
+
+        let (backend, source_report, conversion_report) = if let Some(threads) = args.threads {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .map_err(|e| format!("failed to initialize rayon thread pool: {e}"))?;
+            pool.install(convert_fn)
+        } else {
+            convert_fn()
+        }
+        .map_err(|e| e.to_string())?;
 
         println!("Conversion successful");
         println!("  Input (GDAL):    {}", args.input.display());

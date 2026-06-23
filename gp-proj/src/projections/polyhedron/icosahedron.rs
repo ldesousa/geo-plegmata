@@ -11,69 +11,62 @@ use std::f64::consts::PI;
 
 use crate::{
     models::vector_3d::Vector3D,
-    projections::polyhedron::geometry::Face,
+    projections::polyhedron::geometry::{Face, Orientation},
 };
 
 use super::polyhedron::Polyhedron;
 
-/// Factory function to create an icosahedron with optimal orientation for DGGS
-/// - Almost no vertices on land, which reduces distortion for land-based DGGS queries
-/// by avoiding vertex-based singularities over populated areas.
-/// - Two vertices on the poles, which ensures better symmetry for polar areas and
-/// simplifies some projections.
-/// - Rotated implementation optimized for equal-area projections.
-/// That means this icosahedron is not a standard implementation but a rotated implementation to fit equal-area projections.
-/// The other vertices are on northern and southern hemisphere in two equatorial rings, with alternating longitude.
-
-pub fn new() -> Polyhedron {
-    let vertices = create_vertices();
+/// Factory function to create an icosahedron with the given orientation.
+///
+/// `orientation` specifies where vertex 0 (the top vertex, tip of the five top
+/// triangles) is placed on the globe. Use Orientation::DGGS_OPTIMAL for the 
+/// standard land-avoiding placement (with one vertex positioned on land) or Orientation::POLAR for the
+/// canonical mathematical alignment with a vertex at each pole.
+pub fn new(orientation: Orientation) -> Polyhedron {
+    let vertices = create_vertices(orientation);
     let faces = create_faces();
-    let num_edges = 30; // Icosahedron has 30 edges
-
-    Polyhedron::new(vertices, faces, num_edges)
+    Polyhedron::new(vertices, faces, 30)
 }
 
-/// Create the 12 icosahedron vertices
-fn create_vertices() -> Vec<Vector3D> {
-    let mut vertices = Vec::with_capacity(12);
+/// Build the 12 vertices starting from the canonical polar alignment, then rotate
+/// the whole icosahedron so vertex 0 lands at the requested orientation.
+///
+/// The rotation is decomposed into:
+///   1. pitch by the colatitude (PI/2 − lat): moves vertex 0 from (0,0,1) to
+///      (cos(lat), 0, sin(lat)) — no longitude change yet.
+///   2. yaw by the longitude: sweeps that point to the final (lat, lon) position.
+///
+/// Applying both steps to every vertex preserves topology and all inter-vertex
+/// angular distances.
+fn create_vertices(orientation: Orientation) -> Vec<Vector3D> {
     let z = 1.0 / 5.0_f64.sqrt();
     let r = (1.0 - z.powi(2)).sqrt();
 
-    // North Pole (Vertex 0)
-    vertices.push(Vector3D {
-        x: 0.0,
-        y: 0.0,
-        z: 1.0,
-    });
+    let mut vertices = Vec::with_capacity(12);
+
+    // Canonical orientation: vertex 0 at north pole
+    vertices.push(Vector3D { x: 0.0, y: 0.0, z: 1.0 });
 
     // Upper ring (Vertices 1-5)
     for i in 0..5 {
         let angle = 2.0 * PI * (i as f64) / 5.0;
-        vertices.push(Vector3D {
-            x: r * angle.cos(),
-            y: r * angle.sin(),
-            z: z,
-        });
+        vertices.push(Vector3D { x: r * angle.cos(), y: r * angle.sin(), z });
     }
 
-    // Lower ring (Vertices 6-10, rotated by 36°)
+    // Lower ring (Vertices 6-10, rotated by 36° relative to upper ring)
     for i in 0..5 {
         let angle = 2.0 * PI * (i as f64) / 5.0 + PI / 5.0;
-        vertices.push(Vector3D {
-            x: r * angle.cos(),
-            y: r * angle.sin(),
-            z: -z,
-        })
+        vertices.push(Vector3D { x: r * angle.cos(), y: r * angle.sin(), z: -z });
     }
 
-    // South Pole (Vertex 11)
-    vertices.push(Vector3D {
-        x: 0.0,
-        y: 0.0,
-        z: -1.0,
-    });
+    // South pole (Vertex 11)
+    vertices.push(Vector3D { x: 0.0, y: 0.0, z: -1.0 });
 
-    vertices
+    let lat = orientation.lat_deg.to_radians();
+    let lon = orientation.lon_deg.to_radians();
+    let colatitude = PI / 2.0 - lat;
+
+    vertices.iter().map(|&v| v.pitch(colatitude).yaw(lon)).collect()
 }
 
 /// Create the 20 triangular faces of the icosahedron
@@ -108,17 +101,21 @@ fn create_faces() -> Vec<Face> {
 mod tests {
     use super::*;
 
+    fn dggs() -> Polyhedron {
+        new(Orientation::DGGS_OPTIMAL)
+    }
+
     #[test]
     fn test_icosahedron_creation() {
-        let ico = new();
+        let ico = dggs();
         assert_eq!(ico.num_vertices(), 12);
         assert_eq!(ico.num_faces(), 20);
         assert_eq!(ico.num_edges(), 30);
     }
+
     #[test]
     fn test_face_centers_on_unit_sphere() {
-        let ico = new();
-
+        let ico = dggs();
         for i in 0..ico.num_faces() {
             let center = ico.face_center(i);
             let norm = center.dot(center);
@@ -132,8 +129,7 @@ mod tests {
 
     #[test]
     fn test_face_centers_inside_faces() {
-        let ico = new();
-
+        let ico = dggs();
         for i in 0..ico.num_faces() {
             let center = ico.face_center(i);
             assert!(
@@ -142,5 +138,39 @@ mod tests {
                 i
             );
         }
+    }
+
+    #[test]
+    fn test_polar_orientation_vertex_at_north_pole() {
+        let ico = new(Orientation::POLAR);
+        let v0 = ico.vertices()[0];
+        assert!((v0.x).abs() < 1e-10);
+        assert!((v0.y).abs() < 1e-10);
+        assert!((v0.z - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_dggs_optimal_vertex_position() {
+        let ico = new(Orientation::DGGS_OPTIMAL);
+        let v0 = ico.vertices()[0];
+        let lat = 58.397145907431_f64.to_radians();
+        let lon = 11.20_f64.to_radians();
+        let expected_x = lat.cos() * lon.cos();
+        let expected_y = lat.cos() * lon.sin();
+        let expected_z = lat.sin();
+        assert!((v0.x - expected_x).abs() < 1e-10, "x mismatch");
+        assert!((v0.y - expected_y).abs() < 1e-10, "y mismatch");
+        assert!((v0.z - expected_z).abs() < 1e-10, "z mismatch");
+    }
+
+    #[test]
+    fn test_custom_orientation() {
+        let orientation = Orientation::new(0.0, 0.0);
+        let ico = new(orientation);
+        let v0 = ico.vertices()[0];
+        // lat=0, lon=0 => vertex 0 on the equator at prime meridian: (1, 0, 0)
+        assert!((v0.x - 1.0).abs() < 1e-10, "x mismatch");
+        assert!((v0.y).abs() < 1e-10, "y mismatch");
+        assert!((v0.z).abs() < 1e-10, "z mismatch");
     }
 }

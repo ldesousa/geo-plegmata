@@ -13,7 +13,7 @@ geo = "0.30.0"
 napi = "3.0.0"
 napi-derive = "3.0.0"
 # api = { path = "../../api" }   # depends on your core crate
-api = {git = "https://github.com/GeoPlegma/GeoPlegma.git", package = "api", rev = "dd4661f0ac4b7287ea24975ec3986eccf14d1db9"}
+geoplegma = {git = "https://github.com/GeoPlegma/GeoPlegma.git", package = "geoplegma"}
 getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]
