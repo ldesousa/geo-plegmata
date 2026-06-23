@@ -95,6 +95,7 @@ pub enum DggrsUid {
     RTEA9R,
     IVEA7H,
     IVEA7H_Z7,
+    HEX9,
 }
 
 impl DggrsUid {
@@ -112,6 +113,7 @@ impl DggrsUid {
             DggrsUid::RTEA9R => 8,
             DggrsUid::IVEA7H => 9,
             DggrsUid::IVEA7H_Z7 => 10,
+            DggrsUid::HEX9 => 11,
         }
     }
 
@@ -159,6 +161,7 @@ pub enum DggrsName {
     RTEA9R,
     IVEA7H,
     IVEA7H_Z7,
+    HEX9,
 }
 impl fmt::Display for DggrsName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -173,6 +176,7 @@ impl fmt::Display for DggrsName {
             DggrsName::RTEA9R => "RTEA9R",
             DggrsName::IVEA7H => "IVEA7H",
             DggrsName::IVEA7H_Z7 => "IVEA7H_Z7",
+            DggrsName::HEX9 => "HEX9",
         };
         f.write_str(s)
     }
@@ -184,6 +188,7 @@ pub enum DggrsImplementation {
     DGGRID,
     DGGAL,
     H3O,
+    HEX9,
 }
 
 impl fmt::Display for DggrsImplementation {
@@ -193,6 +198,7 @@ impl fmt::Display for DggrsImplementation {
             DggrsImplementation::DGGRID => "DGGRID",
             DggrsImplementation::DGGAL => "DGGAL",
             DggrsImplementation::H3O => "H3O",
+            DggrsImplementation::HEX9 => "HEX9",
         };
         f.write_str(s)
     }

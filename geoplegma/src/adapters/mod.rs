@@ -10,3 +10,4 @@
 pub mod dggrid;
 pub mod dggal;
 pub mod h3o;
+pub mod hex9;
