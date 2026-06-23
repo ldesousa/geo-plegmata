@@ -241,7 +241,7 @@ impl ZarrBackend {
         let aperture = u64::from(self.metadata.dggrs.spec().aperture);
         let data_type_size_bytes = self.metadata.attributes.first().map(|a| a.dtype.byte_size()).unwrap_or(1);
 
-        let (target_chunk_level, chunk_size) = crate::geotiff_convert::choose_best_chunk_level_and_size(
+        let (target_chunk_level, chunk_size) = crate::convert::choose_best_chunk_level_and_size(
             RefinementLevel::new(target_level_i32)?,
             min_chunk_level,
             max_relative_depth_allowed,
