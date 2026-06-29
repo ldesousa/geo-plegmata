@@ -1,5 +1,5 @@
 [workspace]
-members = ["geoplegma", "gp-bindings/js", "gp-encoding", "gp-proj", "gp-vector", "viewer-3d/src-tauri"]
+members = ["geoplegma", "gp-bindings/js", "gp-encoding", "gp-proj", "viewer-3d/src-tauri"]
 exclude = ["tests", "diagrams", "docs"]
 resolver = "3"
 
@@ -9,3 +9,6 @@ authors = ["GeoPlegma Developers", "GeoInsight"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
 readme = "README.md"
+
+[patch.crates-io]
+gdal = { git = "https://github.com/AlexanderWillner/gdal.git", branch = "fix/gdal-3.13-compat" }

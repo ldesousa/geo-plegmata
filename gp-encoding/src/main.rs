@@ -13,7 +13,7 @@ use clap::{Args, Parser, Subcommand};
 use geoplegma::types::{DggrsUid, Point, RefinementLevel};
 use gp_encoding::{
     Compression, StorageBackend, ZarrBackend, convert_geotiff_file_to_backend, format_value,
-    query_value_for_point,
+    query_value_for_point, convert_vector_file_to_json,
 };
 
 #[derive(Parser, Debug)]
@@ -29,8 +29,8 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Convert a GeoTIFF file into a Zarr-backed encoded dataset.
-    ConvertGeotiff(ConvertGeotiffArgs),
+    /// Convert a GeoTIFF or vector file into an encoded dataset.
+    Convert(ConvertArgs),
     /// Add a coarser resolution level by aggregating an existing level.
     AddLevel(AddLevelArgs),
     /// Query a value at geographic coordinates.
@@ -40,17 +40,20 @@ enum Commands {
 }
 
 #[derive(Args, Debug)]
-struct ConvertGeotiffArgs {
+struct ConvertArgs {
     /// DGGRS to use for the output dataset.
     #[arg(short, long)]
     dggrs: DggrsUid,
-    /// Input GeoTIFF path.
+    /// Input path (GeoTIFF or vector file).
     #[arg(short, long)]
     input: PathBuf,
-    /// Output Zarr store path.
-    #[arg(short, long, default_value = "./tmp/gp_encoding_geotiff_convert")]
+    /// Output path (Zarr store for raster, JSON file for vector).
+    #[arg(short, long, default_value = "./tmp/gp_encoding_convert")]
     output: PathBuf,
-    /// Optional compression for Zarr chunks.
+    /// Optional refinement level (required for vector files).
+    #[arg(short, long)]
+    level: Option<u8>,
+    /// Optional compression for Zarr chunks (raster only).
     #[arg(long, value_enum)]
     compression: Option<Compression>,
     /// Print conversion statistics after a successful conversion.
@@ -101,7 +104,7 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::ConvertGeotiff(args) => run_convert_geotiff(args),
+        Commands::Convert(args) => run_convert(args),
         Commands::AddLevel(args) => run_add_level(args),
         Commands::Query(args) => run_query(args),
         Commands::Stats(args) => run_stats(args),
@@ -113,33 +116,59 @@ fn main() {
     }
 }
 
-fn run_convert_geotiff(args: ConvertGeotiffArgs) -> Result<(), String> {
-    if args.output.exists() {
-        std::fs::remove_dir_all(&args.output).map_err(|e| {
-            format!(
-                "failed to clean output store {}: {e}",
-                args.output.display()
-            )
-        })?;
+fn run_convert(args: ConvertArgs) -> Result<(), String> {
+    if !args.input.exists() {
+        return Err(format!("input path does not exist: {}", args.input.display()));
     }
 
-    let (backend, source_report, conversion_report) =
-        convert_geotiff_file_to_backend::<ZarrBackend>(
-            &args.input,
-            &args.output,
-            args.dggrs,
-            args.compression,
-        )
-        .map_err(|e| e.to_string())?;
+    // Open dataset to detect format (raster or vector)
+    let dataset = gdal::Dataset::open(&args.input)
+        .map_err(|e| format!("failed to open dataset: {e}"))?;
 
-    println!("Conversion successful");
-    println!("  Input:      {}", args.input.display());
-    println!("  Output:     {}", args.output.display());
-    println!("  Levels:     {:?}", backend.levels());
+    let is_vector = dataset.layer_count() > 0;
 
-    if args.report {
-        print!("{source_report}");
-        print!("{conversion_report}");
+    if is_vector {
+        println!("Detected vector dataset with {} layers", dataset.layer_count());
+        let level = args
+            .level
+            .ok_or_else(|| "error: --level is required for vector datasets".to_string())?;
+        let refinement = RefinementLevel::from(level);
+
+        convert_vector_file_to_json(&args.input, &args.output, args.dggrs, refinement)
+            .map_err(|e| e.to_string())?;
+
+        println!("Conversion successful");
+        println!("  Input:      {}", args.input.display());
+        println!("  Output:     {}", args.output.display());
+    } else {
+        println!("Detected raster dataset");
+        if args.output.exists() {
+            std::fs::remove_dir_all(&args.output).map_err(|e| {
+                format!(
+                    "failed to clean output store {}: {e}",
+                    args.output.display()
+                )
+            })?;
+        }
+
+        let (backend, source_report, conversion_report) =
+            convert_geotiff_file_to_backend::<ZarrBackend>(
+                &args.input,
+                &args.output,
+                args.dggrs,
+                args.compression,
+            )
+            .map_err(|e| e.to_string())?;
+
+        println!("Conversion successful");
+        println!("  Input:      {}", args.input.display());
+        println!("  Output:     {}", args.output.display());
+        println!("  Levels:     {:?}", backend.levels());
+
+        if args.report {
+            print!("{source_report}");
+            print!("{conversion_report}");
+        }
     }
 
     Ok(())
