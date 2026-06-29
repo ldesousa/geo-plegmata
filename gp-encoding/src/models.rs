@@ -11,27 +11,9 @@ use clap::ValueEnum;
 use geoplegma::types::DggrsUid;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-#[allow(non_camel_case_types)]
-#[serde(remote = "DggrsUid")]
-pub enum DggrsUidDef {
-    ISEA3HDGGRID,
-    IGEO7,
-    H3,
-    IVEA3H,
-    ISEA3HDGGAL,
-    IVEA9R,
-    ISEA9R,
-    RTEA3H,
-    RTEA9R,
-    IVEA7H,
-    IVEA7H_Z7,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatasetMetadata {
     /// DGGS Reference System identifier
-    #[serde(with = "DggrsUidDef")]
     pub dggrs: DggrsUid,
 
     /// Schema of the stored attributes.

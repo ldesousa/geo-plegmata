@@ -14,4 +14,4 @@ pub mod spherical_geometry;
 
 // Re-export the main types
 pub use polyhedron::Polyhedron;
-pub use geometry::{Face, ArcLengths};
+pub use geometry::{Face, ArcLengths, Orientation};

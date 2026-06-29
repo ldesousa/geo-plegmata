@@ -340,7 +340,7 @@ mod tests {
     use geo::Point;
 
     use crate::projections::{
-        polyhedron::icosahedron::{self, new},
+        polyhedron::{icosahedron, Orientation},
         projections::{traits::Projection, vgc::Vgc},
     };
 
@@ -364,25 +364,25 @@ mod tests {
         let p8 = Point::new(66.665798, -77.717034);
         let p9 = Point::new(63.501735, 80.099071);
         let projection = Vgc;
-        let icosahedron = new();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         let result =
             projection.geo_to_cartesian(vec![p1, p2, p3, p4, p5, p6, p7, p8, p9], Some(&icosahedron), None);
 
         assert_eq!(result[0].face, 8);
-        assert_eq!(result[1].face, 6);
+        assert_eq!(result[1].face, 5);
         assert_eq!(result[2].face, 3);
-        assert_eq!(result[3].face, 16);
-        assert_eq!(result[4].face, 15);
+        assert_eq!(result[3].face, 7);
+        assert_eq!(result[4].face, 17);
         assert_eq!(result[5].face, 16);
-        assert_eq!(result[6].face, 12);
-        assert_eq!(result[7].face, 11);
-        assert_eq!(result[8].face, 0);
+        assert_eq!(result[6].face, 13);
+        assert_eq!(result[7].face, 19);
+        assert_eq!(result[8].face, 4);
     }
 
     #[test]
     fn test_spatial_consistency() {
         let projection = Vgc;
-        let icosahedron = new();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         // Test points
         let lisbon = Point::new(-9.49420, 38.68499);
         let porto = Point::new(-8.61099, 41.14961); // ~300km north of Lisbon
@@ -406,7 +406,7 @@ mod tests {
     #[test]
     fn test_pole_behavior() {
         let projection = Vgc;
-        let icosahedron = new();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         // Points around the pole should be on adjacent faces
         let points = vec![
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn test_equator_distribution() {
         let projection = Vgc;
-        let icosahedron = new();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         // Points evenly distributed around equator
         let points: Vec<Point> = (0..10).map(|i| Point::new(i as f64 * 36.0, 0.0)).collect();
@@ -452,7 +452,7 @@ mod tests {
     #[test]
     fn test_distortion() {
         let projection = Vgc;
-        let icosahedron = new();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron);
         println!("h: {} (expected: 0.7580403)", distortion.h);
         println!("k: {} (expected: 1.333174)", distortion.k);

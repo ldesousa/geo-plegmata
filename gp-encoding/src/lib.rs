@@ -9,7 +9,7 @@
 
 mod common;
 pub mod error;
-pub mod geotiff_convert;
+pub mod convert;
 pub mod vector_convert;
 pub mod models;
 pub mod query;
@@ -21,7 +21,7 @@ pub mod zarr;
 pub use geoplegma::api::DggrsApi;
 pub use geoplegma::types::{BoundingBox, RefinementLevel, RelativeDepth, Zone, ZoneId, Zones};
 
-pub use geotiff_convert::{compute_source_report, convert_geotiff_file_to_backend};
+pub use convert::{compute_source_report, convert_to_backend, convert_dggrs_store_to_backend};
 pub use vector_convert::{convert_vector_file_to_json, convert_geojson_in_place};
 pub use models::{AttributeSchema, Compression, DataType, DatasetMetadata};
 pub use query::{

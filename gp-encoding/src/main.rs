@@ -12,8 +12,8 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 use geoplegma::types::{DggrsUid, Point, RefinementLevel};
 use gp_encoding::{
-    Compression, StorageBackend, ZarrBackend, convert_geotiff_file_to_backend, format_value,
-    query_value_for_point, convert_vector_file_to_json,
+    Compression, StorageBackend, ZarrBackend, convert_dggrs_store_to_backend,
+    convert_to_backend, convert_vector_file_to_json, format_value, query_value_for_point,
 };
 
 #[derive(Parser, Debug)]
@@ -29,7 +29,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Convert a GeoTIFF or vector file into an encoded dataset.
+    /// Convert a GDAL-supported dataset, existing DGGRS Zarr store, or vector file into a Zarr-backed or JSON encoded dataset.
     Convert(ConvertArgs),
     /// Add a coarser resolution level by aggregating an existing level.
     AddLevel(AddLevelArgs),
@@ -44,9 +44,12 @@ struct ConvertArgs {
     /// DGGRS to use for the output dataset.
     #[arg(short, long)]
     dggrs: DggrsUid,
-    /// Input path (GeoTIFF or vector file).
+    /// Input GDAL dataset path/connection string, existing Zarr store directory path, or vector file path.
     #[arg(short, long)]
     input: PathBuf,
+    /// Optional subdataset variable name to select (for multi-variable formats like NetCDF/HDF5).
+    #[arg(long)]
+    subdataset: Option<String>,
     /// Output path (Zarr store for raster, JSON file for vector).
     #[arg(short, long, default_value = "./tmp/gp_encoding_convert")]
     output: PathBuf,
@@ -59,6 +62,9 @@ struct ConvertArgs {
     /// Print conversion statistics after a successful conversion.
     #[arg(long)]
     report: bool,
+    /// Limit the number of threads used.
+    #[arg(long)]
+    threads: Option<usize>,
 }
 
 #[derive(Args, Debug)]
@@ -121,27 +127,11 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
         return Err(format!("input path does not exist: {}", args.input.display()));
     }
 
-    // Open dataset to detect format (raster or vector)
-    let dataset = gdal::Dataset::open(&args.input)
-        .map_err(|e| format!("failed to open dataset: {e}"))?;
+    if args.input.is_dir() {
+        if args.subdataset.is_some() {
+            return Err("Cannot specify --subdataset when converting an existing Zarr store directory.".to_string());
+        }
 
-    let is_vector = dataset.layer_count() > 0;
-
-    if is_vector {
-        println!("Detected vector dataset with {} layers", dataset.layer_count());
-        let level = args
-            .level
-            .ok_or_else(|| "error: --level is required for vector datasets".to_string())?;
-        let refinement = RefinementLevel::from(level);
-
-        convert_vector_file_to_json(&args.input, &args.output, args.dggrs, refinement)
-            .map_err(|e| e.to_string())?;
-
-        println!("Conversion successful");
-        println!("  Input:      {}", args.input.display());
-        println!("  Output:     {}", args.output.display());
-    } else {
-        println!("Detected raster dataset");
         if args.output.exists() {
             std::fs::remove_dir_all(&args.output).map_err(|e| {
                 format!(
@@ -151,23 +141,98 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
             })?;
         }
 
-        let (backend, source_report, conversion_report) =
-            convert_geotiff_file_to_backend::<ZarrBackend>(
+        let convert_fn = || {
+            convert_dggrs_store_to_backend::<ZarrBackend>(
                 &args.input,
                 &args.output,
                 args.dggrs,
                 args.compression,
             )
-            .map_err(|e| e.to_string())?;
+        };
+
+        let backend = if let Some(threads) = args.threads {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .map_err(|e| format!("failed to initialize rayon thread pool: {e}"))?;
+            pool.install(convert_fn)
+        } else {
+            convert_fn()
+        }
+        .map_err(|e| e.to_string())?;
 
         println!("Conversion successful");
-        println!("  Input:      {}", args.input.display());
-        println!("  Output:     {}", args.output.display());
-        println!("  Levels:     {:?}", backend.levels());
+        println!("  Input (Zarr):    {}", args.input.display());
+        println!("  Output:          {}", args.output.display());
+        println!("  Levels:          {:?}", backend.levels());
+    } else {
+        // Open dataset to detect format (raster or vector)
+        let dataset = gdal::Dataset::open(&args.input)
+            .map_err(|e| format!("failed to open dataset: {e}"))?;
 
-        if args.report {
-            print!("{source_report}");
-            print!("{conversion_report}");
+        let is_vector = dataset.layer_count() > 0;
+
+        if is_vector {
+            if args.subdataset.is_some() {
+                return Err("Cannot specify --subdataset when converting a vector file.".to_string());
+            }
+
+            println!("Detected vector dataset with {} layers", dataset.layer_count());
+            let level = args
+                .level
+                .ok_or_else(|| "error: --level is required for vector datasets".to_string())?;
+            let refinement = RefinementLevel::from(level);
+
+            convert_vector_file_to_json(&args.input, &args.output, args.dggrs, refinement)
+                .map_err(|e| e.to_string())?;
+
+            println!("Conversion successful");
+            println!("  Input:      {}", args.input.display());
+            println!("  Output:     {}", args.output.display());
+        } else {
+            println!("Detected raster dataset");
+            if args.output.exists() {
+                std::fs::remove_dir_all(&args.output).map_err(|e| {
+                    format!(
+                        "failed to clean output store {}: {e}",
+                        args.output.display()
+                    )
+                })?;
+            }
+
+            let convert_fn = || {
+                convert_to_backend::<ZarrBackend>(
+                    &args.input.to_string_lossy(),
+                    args.subdataset.as_deref(),
+                    &args.output,
+                    args.dggrs,
+                    args.compression,
+                )
+            };
+
+            let (backend, source_report, conversion_report) = if let Some(threads) = args.threads {
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .map_err(|e| format!("failed to initialize rayon thread pool: {e}"))?;
+                pool.install(convert_fn)
+            } else {
+                convert_fn()
+            }
+            .map_err(|e| e.to_string())?;
+
+            println!("Conversion successful");
+            println!("  Input (GDAL):    {}", args.input.display());
+            if let Some(sub) = &args.subdataset {
+                println!("  Subdataset:      {}", sub);
+            }
+            println!("  Output:          {}", args.output.display());
+            println!("  Levels:          {:?}", backend.levels());
+
+            if args.report {
+                print!("{source_report}");
+                print!("{conversion_report}");
+            }
         }
     }
 

@@ -110,7 +110,7 @@ const countriesBordersLayer = new GeoJsonLayer({
 });
 
 function App() {
-  const [storePath, setStorePath] = useState('./tmp/gp_encoding_geotiff_convert');
+  const [storePath, setStorePath] = useState('./tmp/gp_encoding_convert');
   const [levels, setLevels] = useState<number[]>([]);
   const [level, setLevel] = useState<number | null>(null);
   const [cells, setCells] = useState<any[]>([]);

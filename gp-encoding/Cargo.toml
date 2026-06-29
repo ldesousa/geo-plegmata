@@ -7,7 +7,7 @@ readme = "../README.md"
 rust-version = "1.88"
 
 [dependencies]
-geoplegma = { path = "../geoplegma" }
+geoplegma = { path = "../geoplegma", features = ["serde"] }
 gdal = { version = "0.19", features = ["bindgen"] }
 geo = "0.30"
 chrono = "0.4"
