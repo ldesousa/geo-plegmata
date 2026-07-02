@@ -51,8 +51,8 @@ struct ConvertArgs {
     #[arg(long)]
     subdataset: Option<String>,
     /// Output path (Zarr store for raster, JSON file for vector).
-    #[arg(short, long, default_value = "./tmp/gp_encoding_convert")]
-    output: PathBuf,
+    #[arg(short, long)]
+    output: Option<PathBuf>,
     /// Optional refinement level (required for vector files).
     #[arg(short, long)]
     level: Option<u8>,
@@ -132,11 +132,19 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
             return Err("Cannot specify --subdataset when converting an existing Zarr store directory.".to_string());
         }
 
-        if args.output.exists() {
-            std::fs::remove_dir_all(&args.output).map_err(|e| {
+        let output = args.output.clone().unwrap_or_else(|| {
+            let default_name = args.input
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("gp_encoding_convert");
+            PathBuf::from(default_name)
+        });
+
+        if output.exists() {
+            std::fs::remove_dir_all(&output).map_err(|e| {
                 format!(
                     "failed to clean output store {}: {e}",
-                    args.output.display()
+                    output.display()
                 )
             })?;
         }
@@ -144,7 +152,7 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
         let convert_fn = || {
             convert_dggrs_store_to_backend::<ZarrBackend>(
                 &args.input,
-                &args.output,
+                &output,
                 args.dggrs,
                 args.compression,
             )
@@ -163,7 +171,7 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
 
         println!("Conversion successful");
         println!("  Input (Zarr):    {}", args.input.display());
-        println!("  Output:          {}", args.output.display());
+        println!("  Output:          {}", output.display());
         println!("  Levels:          {:?}", backend.levels());
     } else {
         // Open dataset to detect format (raster or vector)
@@ -171,6 +179,18 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
             .map_err(|e| format!("failed to open dataset: {e}"))?;
 
         let is_vector = dataset.layer_count() > 0;
+
+        let output = args.output.clone().unwrap_or_else(|| {
+            let default_name = args.input
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("gp_encoding_convert");
+            let mut path = PathBuf::from(default_name);
+            if is_vector {
+                path.set_extension("json");
+            }
+            path
+        });
 
         if is_vector {
             if args.subdataset.is_some() {
@@ -183,19 +203,19 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
                 .ok_or_else(|| "error: --level is required for vector datasets".to_string())?;
             let refinement = RefinementLevel::from(level);
 
-            convert_vector_file_to_json(&args.input, &args.output, args.dggrs, refinement)
+            convert_vector_file_to_json(&args.input, &output, args.dggrs, refinement)
                 .map_err(|e| e.to_string())?;
 
             println!("Conversion successful");
             println!("  Input:      {}", args.input.display());
-            println!("  Output:     {}", args.output.display());
+            println!("  Output:     {}", output.display());
         } else {
             println!("Detected raster dataset");
-            if args.output.exists() {
-                std::fs::remove_dir_all(&args.output).map_err(|e| {
+            if output.exists() {
+                std::fs::remove_dir_all(&output).map_err(|e| {
                     format!(
                         "failed to clean output store {}: {e}",
-                        args.output.display()
+                        output.display()
                     )
                 })?;
             }
@@ -204,7 +224,7 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
                 convert_to_backend::<ZarrBackend>(
                     &args.input.to_string_lossy(),
                     args.subdataset.as_deref(),
-                    &args.output,
+                    &output,
                     args.dggrs,
                     args.compression,
                 )
@@ -226,7 +246,7 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
             if let Some(sub) = &args.subdataset {
                 println!("  Subdataset:      {}", sub);
             }
-            println!("  Output:          {}", args.output.display());
+            println!("  Output:          {}", output.display());
             println!("  Levels:          {:?}", backend.levels());
 
             if args.report {
