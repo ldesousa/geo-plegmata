@@ -13,7 +13,7 @@ use geo::Point;
 use geoplegma::types::RefinementLevel; 
 use gp_proj::{
     projections::{
-        polyhedron::{Orientation, icosahedron::new, spherical_geometry::barycentric_coordinates},
+        polyhedron::{Orientation, icosahedron::new},
         projections::{traits::Projection, vgc::Vgc},
     },
     utils::shape::cartesian_to_barycentric,
@@ -283,7 +283,6 @@ impl DggrsSysApi for IVEA3HBary {
 mod tests {
 
     use crate::impls::ivea3h_bary::IVEA3HBary;
-    use crate::sys_api::DggrsSysApi;
     use geoplegma::types::RefinementLevel;
 
     #[test]
@@ -328,4 +327,51 @@ mod tests {
         assert_eq!(centre.1, 6);
     }
 
+    #[test]
+    fn test_edge_cases() {
+        
+        let mut system = IVEA3HBary::new(RefinementLevel::new(3).unwrap());
+
+        let mut i = 2;
+        let mut j = 5;
+        let mut face = 7;
+        let mut unique = system.edge_cases(i, j, face);
+        assert_eq!(i, unique.0);
+        assert_eq!(j, unique.1);
+        assert_eq!(face, unique.2);
+        
+        i = 0;
+        j = 3;
+        face = 1;
+        unique = system.edge_cases(i, j, face);
+        assert_eq!(i, unique.0);
+        assert_eq!(j, unique.1);
+        assert_eq!(face, unique.2);
+        
+        i = 3;
+        j = 6;
+        face = 9;
+        unique = system.edge_cases(i, j, face);
+        assert_eq!(0, unique.0);
+        assert_eq!(6, unique.1);
+        assert_eq!(1, unique.2);
+
+        system = IVEA3HBary::new(RefinementLevel::new(4).unwrap());
+        
+        i = 3;
+        j = 6;
+        face = 9;
+        unique = system.edge_cases(i, j, face);
+        assert_eq!(0, unique.0);
+        assert_eq!(6, unique.1);
+        assert_eq!(1, unique.2);
+        
+        i = 4;
+        j = 5;
+        face = 13;
+        unique = system.edge_cases(i, j, face);
+        assert_eq!(j, unique.0);
+        assert_eq!(i, unique.1);
+        assert_eq!(6, unique.2);
+    }
 }
