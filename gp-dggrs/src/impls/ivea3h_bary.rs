@@ -13,7 +13,7 @@ use geo::Point;
 use geoplegma::types::RefinementLevel; 
 use gp_proj::{
     projections::{
-        polyhedron::{icosahedron::new, spherical_geometry::barycentric_coordinates},
+        polyhedron::{Orientation, icosahedron::new, spherical_geometry::barycentric_coordinates},
         projections::{traits::Projection, vgc::Vgc},
     },
     utils::shape::cartesian_to_barycentric,
@@ -120,7 +120,7 @@ impl IVEA3HBary {
         return zone_centre;
     }
 
-    // Determines face to be enconded in index for edge cases, i.e. cells/zones spaning two or more
+    // Determines face to be enconded in the index for edge cases, i.e. cells/zones spaning two or more
     // icosahedron faces. Guarantees each cell/zone has only one index.
     fn edge_cases(&self, mut i: u32, mut j: u32, mut face: i32) -> (u32, u32, i32) {
         let mut zero = false;
@@ -249,7 +249,7 @@ impl DggrsSysApi for IVEA3HBary {
     ) -> u64 {
         //        let bary = IVEA3HBary::project(point);
         let projection = Vgc;
-        let icosahedron = new();
+        let icosahedron = new(Orientation::DGGS_OPTIMAL);
         let projected = projection.geo_to_cartesian(vec![point], Some(&icosahedron), None);
         let face : i32 = projected[0].face.try_into().unwrap();
         let triangle = projected[0].triangle;
@@ -326,6 +326,6 @@ mod tests {
         centre = system.find_nearest_zone_centre(bary2);
         assert_eq!(centre.0, 12);
         assert_eq!(centre.1, 6);
-
     }
+
 }
