@@ -23,8 +23,8 @@ pub enum EncodingError {
     #[error("DGGRS Fabric error: {0}")]
     DggrsFabric(#[from] geoplegma::error::factory::FactoryError),
 
-    #[error("GeoTIFF error: {0}")]
-    GeoTiff(String),
+    #[error("Dataset error: {0}")]
+    Dataset(String),
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),

@@ -82,6 +82,7 @@ impl BoundingBox {
 
 // NOTE: The naming needs to be adjusted to the DGGRS Registry
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DggrsUid {
     ISEA3HDGGRID,
     IGEO7,
