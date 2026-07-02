@@ -110,7 +110,8 @@ const countriesBordersLayer = new GeoJsonLayer({
 });
 
 function App() {
-  const [storePath, setStorePath] = useState('./tmp/gp_encoding_convert');
+  const [path, setPath] = useState('./tmp/gp_encoding_convert');
+  const mode = path.trim().endsWith('.json') ? 'vector' : 'raster';
   const [levels, setLevels] = useState<number[]>([]);
   const [level, setLevel] = useState<number | null>(null);
   const [cells, setCells] = useState<any[]>([]);
@@ -127,6 +128,9 @@ function App() {
   });
   const [error, setError] = useState<string | null>(null);
 
+  const [vectorData, setVectorData] = useState<any>(null);
+  const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
+
   const resolveDefaultLevel = (availableLevels: number[]) => {
     if (availableLevels.length === 0) {
       return null;
@@ -137,7 +141,7 @@ function App() {
 
   const fetchLevels = async () => {
     try {
-      const storeLevels: number[] = await invoke('get_levels', { store: storePath });
+      const storeLevels: number[] = await invoke('get_levels', { store: path });
       const sortedLevels = [...storeLevels].sort((a, b) => a - b);
       setLevels(sortedLevels);
       setLevel((current) => {
@@ -157,8 +161,10 @@ function App() {
   };
 
   useEffect(() => {
-    fetchLevels();
-  }, [storePath]);
+    if (mode === 'raster') {
+      fetchLevels();
+    }
+  }, [path, mode]);
 
   const resolveLevelForZoom = (zoom: number, availableLevels: number[]) => {
     if (availableLevels.length === 0) return null;
@@ -188,7 +194,7 @@ function App() {
       const bounds = viewport.getBounds();
 
       const payload = await invoke('get_data_binary', { 
-        store: storePath, 
+        store: path, 
         level: resolvedLevel,
         bbox: [bounds[0], bounds[1], bounds[2], bounds[3]]
       });
@@ -205,7 +211,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (storePath && levels.length > 0) {
+    if (mode === 'raster' && path && levels.length > 0) {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -213,12 +219,39 @@ function App() {
         loadDataForCurrentView();
       }, 500);
     }
-  }, [viewState, levels, storePath]);
+  }, [viewState, levels, path, mode]);
+
+  const loadVectorData = async () => {
+    if (!path) return;
+    setError(null);
+    setIsLoading(true);
+    try {
+      const data: any = await invoke('load_vector_geojson', { path });
+      setVectorData(data);
+      if (data.layers) {
+        const layerNames = Object.keys(data.layers);
+        if (layerNames.length > 0) {
+          setSelectedLayer(layerNames[0]);
+        } else {
+          setSelectedLayer(null);
+        }
+      } else {
+        setSelectedLayer(null);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.toString());
+      setVectorData(null);
+      setSelectedLayer(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const layers = useMemo(() => {
     const layerList: any[] = [countriesBordersLayer, earthMaskLayer];
 
-    if (cells.length > 0) {
+    if (mode === 'raster' && cells.length > 0) {
       const useElevation = bandCount === 1;
 
       const polygonLayer = new SolidPolygonLayer({
@@ -237,10 +270,34 @@ function App() {
       });
 
       layerList.push(polygonLayer);
+    } else if (mode === 'vector' && vectorData) {
+      let geojsonToRender = null;
+      if (vectorData.geojson) {
+        geojsonToRender = vectorData.geojson;
+      } else if (vectorData.layers && selectedLayer && vectorData.layers[selectedLayer]) {
+        geojsonToRender = vectorData.layers[selectedLayer];
+      }
+
+      if (geojsonToRender) {
+        const vectorLayer = new GeoJsonLayer({
+          id: 'VectorGeoJsonLayer',
+          data: geojsonToRender,
+          stroked: true,
+          filled: true,
+          pointRadiusMinPixels: 4,
+          lineWidthMinPixels: 2,
+          getFillColor: [34, 211, 238, 150],
+          getLineColor: [34, 211, 238, 255],
+          getPointRadius: 100,
+          getElevation: 0,
+          pickable: true,
+        });
+        layerList.push(vectorLayer);
+      }
     }
 
     return layerList;
-  }, [cells, bandCount]);
+  }, [cells, bandCount, mode, vectorData, selectedLayer]);
 
   return (
     <div className="app-root" onContextMenu={(e) => e.preventDefault()}>
@@ -250,7 +307,16 @@ function App() {
         onViewStateChange={({ viewState }: any) => setViewState(viewState as any)}
         controller={true}
         layers={layers}
-        getTooltip={({ object }: any) => object && `${object.hex}`}
+        getTooltip={({ object }: any) => {
+          if (!object) return null;
+          if (object.hex) return object.hex;
+          if (object.properties) {
+            return Object.entries(object.properties)
+              .map(([k, v]) => `${k}: ${v}`)
+              .join('\n');
+          }
+          return null;
+        }}
         style={{ backgroundColor: 'transparent' }}
       />
 
@@ -258,27 +324,76 @@ function App() {
         <div className="shell-middle">
           <aside className="control-panel">
             <div className="input-group">
-              <label>Store Path</label>
+              <label>Data Path</label>
               <input
                 type="text"
-                value={storePath}
-                onChange={e => setStorePath(e.target.value)}
-                placeholder="/path/to/zarr"
+                value={path}
+                onChange={e => setPath(e.target.value)}
+                placeholder="/path/to/zarr or /path/to/vector.json"
               />
             </div>
-            <div className="input-group">
-              <label>Active Level</label>
-              <input
-                type="text"
-                value={level !== null ? level : ''}
-                disabled
-              />
-            </div>
-            <div className="panel-actions">
-              <button onClick={loadDataForCurrentView} disabled={isLoading || levels.length === 0}>
-                {isLoading ? 'Loading...' : 'Reload Data'}
-              </button>
-            </div>
+
+            {mode === 'raster' ? (
+              <>
+                <div className="input-group">
+                  <label>Active Level</label>
+                  <input
+                    type="text"
+                    value={level !== null ? level : ''}
+                    disabled
+                  />
+                </div>
+                <div className="panel-actions">
+                  <button onClick={loadDataForCurrentView} disabled={isLoading || levels.length === 0}>
+                    {isLoading ? 'Loading...' : 'Reload Data'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {vectorData && (
+                  <>
+                    <div className="input-group">
+                      <label>DGGRS</label>
+                      <input
+                        type="text"
+                        value={vectorData.dggrs}
+                        disabled
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label>Refinement Level</label>
+                      <input
+                        type="text"
+                        value={vectorData.refinement_level}
+                        disabled
+                      />
+                    </div>
+                  </>
+                )}
+                {vectorData && vectorData.layers && (
+                  <div className="input-group">
+                    <label>Selected Layer</label>
+                    <select
+                      value={selectedLayer || ''}
+                      onChange={e => setSelectedLayer(e.target.value)}
+                    >
+                      {Object.keys(vectorData.layers).map(name => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="panel-actions">
+                  <button onClick={loadVectorData} disabled={isLoading || !path}>
+                    {isLoading ? 'Loading...' : 'Load Vector File'}
+                  </button>
+                </div>
+              </>
+            )}
+
             {error && <div className="error">{error}</div>}
           </aside>
         </div>
