@@ -9,8 +9,14 @@
 
 use std::path::{Path, PathBuf};
 use criterion::{Criterion, criterion_group, criterion_main, black_box};
-use geoplegma::types::DggrsUid;
-use gp_encoding::{ZarrBackend, convert_geotiff_file_to_backend};
+use geoplegma::types::{DggrsUid, Point, RefinementLevel};
+use gp_encoding::{ZarrBackend, convert_geotiff_file_to_backend, StorageBackend};
+use gp_encoding::query::query_value_for_point;
+use gp_encoding::value::decode_value_to_f64;
+use gdal::{Dataset, GeoTransformEx};
+use gdal::spatial_ref::{CoordTransform, SpatialRef};
+use rand::Rng;
+
 
 fn find_tiff_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
@@ -211,5 +217,250 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, bench_convert_geotiffs);
+struct AccuracyComparison {
+    file_name: String,
+    samples_count: usize,
+    matches_count: usize,
+    mismatches_count: usize,
+}
+
+fn bench_query_accuracy(c: &mut Criterion) {
+    let folder = Path::new("benches/files");
+    let output_base = Path::new("benches/bench_out");
+
+    let files = find_tiff_files(folder).unwrap_or_default();
+    if files.is_empty() {
+        eprintln!("Warning: No .tif/.tiff files found in hardcoded directory '{}'", folder.display());
+        return;
+    }
+
+    let mut group = c.benchmark_group("query_accuracy");
+    group.sample_size(10);
+    group.measurement_time(std::time::Duration::from_secs(5));
+
+    let mut accuracy_reports = Vec::new();
+
+    for file_path in files {
+        let file_name = file_path.file_name().unwrap().to_string_lossy().into_owned();
+        let file_size = file_path.metadata().map(|m| m.len()).unwrap_or(0);
+
+        if file_size > 10 * 1024 * 1024 {
+            continue;
+        }
+
+        let output_store = output_base.join(format!("accuracy_{}", file_path.file_stem().unwrap().to_string_lossy()));
+
+        if output_store.exists() {
+            let _ = std::fs::remove_dir_all(&output_store);
+        }
+
+        let conversion_res = convert_geotiff_file_to_backend::<ZarrBackend>(
+            &file_path,
+            &output_store,
+            DggrsUid::H3,
+            None,
+        );
+
+        let (backend, _, report) = match conversion_res {
+            Ok(res) => res,
+            Err(e) => {
+                eprintln!("Warning: Failed to convert {:?} for accuracy benchmark: {:?}", file_path, e);
+                continue;
+            }
+        };
+
+        let dataset = match Dataset::open(&file_path) {
+            Ok(ds) => ds,
+            Err(e) => {
+                eprintln!("Warning: Failed to open original GeoTIFF {:?}: {:?}", file_path, e);
+                let _ = std::fs::remove_dir_all(&output_store);
+                continue;
+            }
+        };
+
+        let (width, height) = dataset.raster_size();
+        let gt = match dataset.geo_transform() {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln!("Warning: Failed to get geotransform for {:?}: {:?}", file_path, e);
+                let _ = std::fs::remove_dir_all(&output_store);
+                continue;
+            }
+        };
+
+        let src_srs = match dataset.spatial_ref() {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Warning: Failed to get spatial ref for {:?}: {:?}", file_path, e);
+                let _ = std::fs::remove_dir_all(&output_store);
+                continue;
+            }
+        };
+
+        let mut wgs84 = match SpatialRef::from_epsg(4326) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("Warning: Failed to create WGS84 SRS: {:?}", e);
+                let _ = std::fs::remove_dir_all(&output_store);
+                continue;
+            }
+        };
+        wgs84.set_axis_mapping_strategy(gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder);
+
+        let to_wgs84 = match CoordTransform::new(&src_srs, &wgs84) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("Warning: Failed to create CoordTransform: {:?}", e);
+                let _ = std::fs::remove_dir_all(&output_store);
+                continue;
+            }
+        };
+
+        let band = match dataset.rasterband(1) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Warning: Failed to get rasterband 1: {:?}", e);
+                let _ = std::fs::remove_dir_all(&output_store);
+                continue;
+            }
+        };
+
+        let refinement_level = RefinementLevel::new(report.refinement_level as i32).unwrap();
+        let dtype = &backend.metadata().attributes[0].dtype;
+
+        let mut rng = rand::thread_rng();
+        let sample_size = 1000;
+        let mut samples = Vec::with_capacity(sample_size);
+
+        for _ in 0..sample_size {
+            let col = rng.gen_range(0..width);
+            let row = rng.gen_range(0..height);
+
+            let pixel_val = match band.read_as::<f64>((col as isize, row as isize), (1, 1), (1, 1), None) {
+                Ok(buf) => buf.data()[0],
+                Err(_) => f64::NAN,
+            };
+
+            let dx = rng.gen_range(-0.5..0.5);
+            let dy = rng.gen_range(-0.5..0.5);
+            let (x_geo, y_geo) = gt.apply(col as f64 + 0.5 + dx, row as f64 + 0.5 + dy);
+            let mut xs = vec![x_geo];
+            let mut ys = vec![y_geo];
+            let mut zs = vec![];
+            
+            let point = if to_wgs84.transform_coords(&mut xs, &mut ys, &mut zs).is_ok() {
+                Some(Point::new(ys[0], xs[0]))
+            } else {
+                None
+            };
+
+            if let Some(pt) = point {
+                samples.push((pt, pixel_val));
+            }
+        }
+
+        let mut matches_count = 0;
+        let mut mismatches_count = 0;
+
+        for (pt, original_val) in &samples {
+            let query_res = query_value_for_point(&backend, refinement_level, 0, *pt);
+            let encoded_val = match query_res {
+                Ok(bytes) => decode_value_to_f64(dtype, &bytes).unwrap_or(f64::NAN),
+                Err(_) => f64::NAN,
+            };
+
+            let is_match = if original_val.is_nan() && encoded_val.is_nan() {
+                true
+            } else if original_val.is_nan() || encoded_val.is_nan() {
+                false
+            } else {
+                original_val == &encoded_val
+            };
+
+            if is_match {
+                matches_count += 1;
+            } else {
+                mismatches_count += 1;
+            }
+        }
+
+        accuracy_reports.push(AccuracyComparison {
+            file_name: file_name.clone(),
+            samples_count: samples.len(),
+            matches_count,
+            mismatches_count,
+        });
+
+        group.bench_function(format!("query_{}", file_name), |b| {
+            let mut idx = 0;
+            b.iter(|| {
+                let (pt, _) = &samples[idx % samples.len()];
+                idx += 1;
+                let _ = query_value_for_point(black_box(&backend), black_box(refinement_level), black_box(0), black_box(*pt));
+            })
+        });
+
+        if output_store.exists() {
+            let _ = std::fs::remove_dir_all(&output_store);
+        }
+    }
+
+    group.finish();
+
+    if !accuracy_reports.is_empty() {
+        println!("\n┌────────────────────────────────────────────────────────────────────────────────────────┐");
+        println!("│                            gp-encoding Query Accuracy Report                           │");
+        println!("├──────────────────────┬───────────────┬───────────────┬───────────────┬─────────────────┤");
+        println!("│ {:<20} │ {:<13} │ {:<13} │ {:<13} │ {:<15} │", "File Name", "Total Samples", "Matches", "Mismatches", "Match Rate");
+        println!("├──────────────────────┼───────────────┼───────────────┼───────────────┼─────────────────┤");
+        for report in &accuracy_reports {
+            let match_rate = if report.samples_count == 0 {
+                "0.0%".to_string()
+            } else {
+                format!("{:.2}%", (report.matches_count as f64 / report.samples_count as f64) * 100.0)
+            };
+            println!(
+                "│ {:<20} │ {:>13} │ {:>13} │ {:>13} │ {:>15} │",
+                report.file_name,
+                report.samples_count,
+                report.matches_count,
+                report.mismatches_count,
+                match_rate
+            );
+        }
+        println!("└──────────────────────┴───────────────┴───────────────┴───────────────┴─────────────────┘\n");
+
+        if let Err(e) = std::fs::create_dir_all(output_base) {
+            eprintln!("Warning: Failed to create output directory for accuracy report: {:?}", e);
+        } else {
+            let report_path = output_base.join("accuracy_report.md");
+            let mut md_content = String::new();
+            md_content.push_str("# gp-encoding Query Accuracy Report\n\n");
+            md_content.push_str("| File Name | Total Samples | Matches | Mismatches | Match Rate |\n");
+            md_content.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
+            for report in &accuracy_reports {
+                let match_rate = if report.samples_count == 0 {
+                    "0.0%".to_string()
+                } else {
+                    format!("{:.2}%", (report.matches_count as f64 / report.samples_count as f64) * 100.0)
+                };
+                md_content.push_str(&format!(
+                    "| {} | {} | {} | {} | {} |\n",
+                    report.file_name,
+                    report.samples_count,
+                    report.matches_count,
+                    report.mismatches_count,
+                    match_rate
+                ));
+            }
+            if let Err(e) = std::fs::write(&report_path, md_content) {
+                eprintln!("Warning: Failed to write accuracy report to {:?}: {:?}", report_path, e);
+            } else {
+                println!("Accuracy report successfully written to {:?}", report_path);
+            }
+        }
+    }
+}
+
+criterion_group!(benches, bench_convert_geotiffs, bench_query_accuracy);
 criterion_main!(benches);

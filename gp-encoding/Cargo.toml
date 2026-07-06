@@ -30,3 +30,5 @@ harness = false
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8.5"
+
