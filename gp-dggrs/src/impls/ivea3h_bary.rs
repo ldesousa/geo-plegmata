@@ -373,5 +373,21 @@ mod tests {
         assert_eq!(j, unique.0);
         assert_eq!(i, unique.1);
         assert_eq!(6, unique.2);
+        
+        i = 0;
+        j = 9;
+        face = 16;
+        unique = system.edge_cases(i, j, face);
+        assert_eq!(i, unique.0);
+        assert_eq!(j, unique.1);
+        assert_eq!(12, unique.2);
+        
+        i = 0;
+        j = 9;
+        face = 7;
+        unique = system.edge_cases(i, j, face);
+        assert_eq!(i, unique.0);
+        assert_eq!(j, unique.1);
+        assert_eq!(1, unique.2);
     }
 }
