@@ -8,9 +8,13 @@
 // except according to those terms.
 
 use geo::Point;
-use gp_proj::projections::{
-    polyhedron::{icosahedron, Orientation},
-    projections::{traits::Projection, vgc::Vgc},
+use gp_proj::{
+    constants::WGS84,
+    ellipsoid::AuthalicSphere,
+    projections::{
+        polyhedron::{icosahedron, Orientation},
+        projections::{traits::Projection, vgc::Vgc},
+    },
 };
 
 pub fn main() -> () {
@@ -25,9 +29,14 @@ pub fn main() -> () {
     let p5 = Point::new(-7.180105784733257, 39.57941279302861);
     let p6 = Point::new(-9.192722996293583, 38.72423364219293);
 
-    let projection = Vgc;
+    let projection = Vgc::default();
     let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-    let coords = projection.geo_to_face(vec![p1, p2, p3, p4, p5, p6], Some(&icosahedron));
+    let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
+    let points = vec![p1, p2, p3, p4, p5, p6]
+        .into_iter()
+        .map(|p| sphere.convert(p))
+        .collect();
+    let coords = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
     println!("{:?}", coords);
 }
