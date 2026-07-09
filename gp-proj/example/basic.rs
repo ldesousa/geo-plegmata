@@ -8,9 +8,13 @@
 // except according to those terms.
 
 use geo::Point;
-use gp_proj::projections::{
-    polyhedron::{Orientation, icosahedron},
-    projections::{traits::Projection, vgc::Vgc},
+use gp_proj::{
+    constants::WGS84,
+    ellipsoid::AuthalicSphere,
+    projections::{
+        polyhedron::{Orientation, icosahedron},
+        projections::{traits::Projection, vgc::Vgc},
+    },
 };
 
 pub fn main() -> () {
@@ -18,7 +22,7 @@ pub fn main() -> () {
         "Basic example for gp-proj. Convert geographic coordinates to barycentric coordinates, and vice-versa."
     );
 
-    let points = [
+    let points: Vec<Point> = vec![
         Point::new(-9.222154, 38.695125),
         Point::new(-138.97503, 47.7022),
         Point::new(99.72721, 25.82577),
@@ -32,14 +36,16 @@ pub fn main() -> () {
         Point::new(30.0, 30.0),
     ];
 
-    let projection = Vgc;
+    let projection = Vgc::default();
     let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-    
+
     for (i, p) in icosahedron.vertices().iter().enumerate() {
         println!("{:?}", (p.x, p.y, p.z));
     }
 
-    let coords = projection.geo_to_cartesian(points.to_vec(), Some(&icosahedron), None);
+    let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
+    let authalic_points = points.iter().map(|p| sphere.convert(*p)).collect();
+    let coords = projection.geo_to_cartesian(authalic_points, Some(&icosahedron), None);
 
     for (i, p) in coords.iter().enumerate() {
         println!(
