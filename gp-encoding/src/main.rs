@@ -53,7 +53,7 @@ struct ConvertArgs {
     /// Output path (Zarr store for raster, JSON file for vector).
     #[arg(short, long)]
     output: Option<PathBuf>,
-    /// Optional refinement level (required for vector files).
+    /// Optional refinement level (defaults to the DGGRS maximum for vector files).
     #[arg(short, long)]
     level: Option<u8>,
     /// Optional compression for Zarr chunks (raster only).
@@ -198,10 +198,14 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
             }
 
             println!("Detected vector dataset with {} layers", dataset.layer_count());
-            let level = args
-                .level
-                .ok_or_else(|| "error: --level is required for vector datasets".to_string())?;
-            let refinement = RefinementLevel::from(level);
+            let refinement = if let Some(level) = args.level {
+                RefinementLevel::from(level)
+            } else {
+                geoplegma::get(args.dggrs)
+                    .map_err(|e| e.to_string())?
+                    .max_refinement_level()
+                    .map_err(|e| e.to_string())?
+            };
 
             convert_vector_file_to_json(&args.input, &output, args.dggrs, refinement)
                 .map_err(|e| e.to_string())?;
