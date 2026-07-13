@@ -9,6 +9,3 @@ authors = ["GeoPlegma Developers", "GeoInsight"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
 readme = "README.md"
-
-[patch.crates-io]
-gdal = { git = "https://github.com/AlexanderWillner/gdal.git", branch = "fix/gdal-3.13-compat" }
