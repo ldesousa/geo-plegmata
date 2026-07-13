@@ -10,7 +10,7 @@
 use std::f64::consts::{E, PI};
 
 use crate::{
-    constants::WGS84, ellipsoid::{AuthalicCoord, AuthalicSphere}, models::vector_3d::Vector3D, projections::{
+    constants::WGS84, ellipsoid::{AuthalicCoord, AuthalicSphere, Ellipsoid}, models::vector_3d::Vector3D, projections::{
         layout::traits::Layout,
         polyhedron::{ArcLengths, Polyhedron},
         projections::traits::{DistortionMetrics, ForwardCartesian, Projection},
@@ -170,9 +170,15 @@ impl Projection for Vgc {
 
     // @TODO - Needs to be reviewed
     // Calculate distortion and compare with Geocart values
-    fn compute_distortion(&self, lat: f64, lon: f64, polyhedron: &Polyhedron) -> DistortionMetrics {
+    fn compute_distortion(
+        &self,
+        lat: f64,
+        lon: f64,
+        polyhedron: &Polyhedron,
+        ellipsoid: &dyn Ellipsoid,
+    ) -> DistortionMetrics {
         let epsilon = 1e-5_f64; // degrees
-        let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
+        let sphere = AuthalicSphere::from_ellipsoid(ellipsoid);
         let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lon, lat));
 
         let center_xy = 
@@ -198,9 +204,9 @@ impl Projection for Vgc {
         let dx_dlambda = (east_xy.coords.x - center_xy.coords.x) / eps_rad;
         let dy_dlambda = (east_xy.coords.y - center_xy.coords.y) / eps_rad;
 
-        // WGS84 radii of curvature (meters/radian)
-        let a = 6378137.0_f64;
-        let e2 = 0.00669437999014_f64;
+        // Radii of curvature (meters/radian), derived from the given ellipsoid
+        let a = ellipsoid.major_axis();
+        let e2 = ellipsoid.eccentricity_squared();
         let lat_rad = lat.to_radians();
         let sin_lat = lat_rad.sin();
         let cos_lat = lat_rad.cos();
@@ -495,7 +501,7 @@ mod tests {
     fn test_distortion() {
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-        let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron);
+        let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron, &WGS84);
         println!("h: {} (expected: 0.7580403)", distortion.h);
         println!("k: {} (expected: 1.333174)", distortion.k);
         println!(
