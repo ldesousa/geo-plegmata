@@ -51,7 +51,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         crs: "",
         aperture: 7,
         min_refinement_level: RefinementLevel::new_const(0),
-        max_refinement_level: RefinementLevel::new_const(16),
+        max_refinement_level: RefinementLevel::new_const(15),
         default_refinement_level: RefinementLevel::new_const(2),
         max_relative_depth: RelativeDepth::new_const(6),
         default_relative_depth: RelativeDepth::new_const(4),
