@@ -36,3 +36,13 @@ cargo run -p gp-encoding -- add-level --store output.zarr --target-level 5
 cargo run -p gp-encoding -- stats --store output.zarr
 ```
 
+## Benchmarking
+
+The input files for the benchmarks should be put in `gp-encoding/benches/files`. Every file in that directory will be converted using the library. The tests will measure time, accuracy and disk usage, with reports being generated in `gp-encoding/benches/bench_out`.
+
+To run the benchmarks, use:
+
+```bash
+cargo bench --bench convert
+```
+
