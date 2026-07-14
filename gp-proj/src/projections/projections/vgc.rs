@@ -168,7 +168,6 @@ impl Projection for Vgc {
         todo!()
     }
 
-    // @TODO - Needs to be reviewed
     // Calculate distortion and compare with Geocart values
     fn compute_distortion(
         &self,
@@ -220,21 +219,27 @@ impl Projection for Vgc {
         let g = dx_dphi / m;
         let h_ = dy_dphi / m;
 
-        // Tissot: a and b are semi-axes of the indicatrix ellipse
+        // Tissot indicatrix semi-axes a, b (Snyder 1987, Map Projections: A Working
+        // Manual, eqs. 4-9-4-13). p, q are the scale magnitudes along the parallel
+        // and meridian; areal_scale = |e*h_ - f*g| = p*q*sin(psi) is the Jacobian,
+        // where psi is the angle between the projected parallel/meridian tangents.
+        //   S = p^2 + q^2, D = 2*areal_scale
+        //   a = (sqrt(S+D) + sqrt(S-D)) / 2
+        //   b = (sqrt(S+D) - sqrt(S-D)) / 2
+        // van Leeuwen & Strebe 2006 ("Slice and Dice", Eq. 29) gives the related
+        // max angular deformation sin(omega) = (a-b)/(a+b); they measure a, b
+        // numerically (small-circle sampling) rather than via this closed form -
+        // this analytic version is equivalent for an infinitesimal circle.
         let p = (e.powi(2) + f.powi(2)).sqrt();
         let q = (g.powi(2) + h_.powi(2)).sqrt();
-        let t = e * g + f * h_;
-
-        let a_tissot = ((p + q).powi(2)
-            - 2.0 * (e * h_ - f * g).abs() * (1.0 - (t / (p * q)).powi(2)).sqrt())
-        .sqrt()
-            / 2.0_f64.sqrt();
-        let b_tissot = ((p - q).powi(2)
-            + 2.0 * (e * h_ - f * g).abs() * (1.0 - (t / (p * q)).powi(2)).sqrt())
-        .sqrt()
-            / 2.0_f64.sqrt();
-
         let areal_scale = (e * h_ - f * g).abs();
+
+        let s = p.powi(2) + q.powi(2);
+        let d = 2.0 * areal_scale;
+        let sum_sq = s + d;
+        let diff_sq = (s - d).max(0.0);
+        let a_tissot = (sum_sq.sqrt() + diff_sq.sqrt()) / 2.0;
+        let b_tissot = (sum_sq.sqrt() - diff_sq.sqrt()) / 2.0;
         let omega = 2.0 * ((a_tissot - b_tissot) / (a_tissot + b_tissot)).asin();
 
         DistortionMetrics {
