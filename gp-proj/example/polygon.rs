@@ -34,7 +34,7 @@ pub fn main() -> () {
     let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
     let points = vec![p1, p2, p3, p4, p5, p6]
         .into_iter()
-        .map(|p| sphere.convert(p))
+        .map(|p| sphere.to_authalic(p))
         .collect();
     let coords = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 

@@ -20,11 +20,12 @@ pub struct AuthalicCoord {
 }
 
 /// Converts geodetic coordinates for a given [`Ellipsoid`] onto its authalic sphere.
-/// 
-/// Built once per ellipsoid (the Clenshaw coefficients are computed once), 
-/// then reused to convert any number of points via [`AuthalicSphere::convert`].
+///
+/// Built once per ellipsoid (the Clenshaw coefficients are computed once),
+/// then reused to convert any number of points via [`AuthalicSphere::to_authalic`].
 pub struct AuthalicSphere {
     coefficients: Vec<f64>,
+    inverse_coefficients: Vec<f64>,
     radius: f64,
 }
 
@@ -34,20 +35,33 @@ impl AuthalicSphere {
             KarneyCoefficients::GEODETIC_TO_AUTHALIC,
             ellipsoid.third_flattening(),
         );
+        let inverse_coefficients = fourier_coefficients(
+            KarneyCoefficients::AUTHALIC_TO_GEODETIC,
+            ellipsoid.third_flattening(),
+        );
 
         Self {
             coefficients,
+            inverse_coefficients,
             radius: ellipsoid.authalic_radius(),
         }
     }
 
 
     /// Convert a geodetic point (lon/lat in degrees) to authalic lon/lat (radians).
-    pub fn convert(&self, point: Point) -> AuthalicCoord {
+    pub fn to_authalic(&self, point: Point) -> AuthalicCoord {
         AuthalicCoord {
             lon: point.x().to_radians(),
             lat: apply_clenshaw_summation(point.y().to_radians(), &self.coefficients),
         }
+    }
+
+    /// Convert an authalic lon/lat (radians) back to a geodetic point (lon/lat in degrees).
+    pub fn to_geodetic(&self, coord: AuthalicCoord) -> Point {
+        Point::new(
+            coord.lon.to_degrees(),
+            apply_clenshaw_summation(coord.lat, &self.inverse_coefficients).to_degrees(),
+        )
     }
 
     /// Radius (meters) of the sphere this converter projects onto.

@@ -10,9 +10,12 @@
 use std::f64::consts::{E, PI};
 
 use crate::{
-    constants::WGS84, ellipsoid::{AuthalicCoord, AuthalicSphere}, models::vector_3d::Vector3D, projections::{
+    constants::WGS84,
+    ellipsoid::{AuthalicCoord, AuthalicSphere},
+    models::vector_3d::Vector3D,
+    projections::{
         layout::traits::Layout,
-        polyhedron::{spherical_geometry::stable_angle_between, ArcLengths, Polyhedron},
+        polyhedron::{ArcLengths, Polyhedron, spherical_geometry::stable_angle_between},
         projections::traits::{DistortionMetrics, ForwardCartesian, Projection},
     },
     utils::shape::triangle,
@@ -66,13 +69,13 @@ const FACE_TEMPLATE_DOWN: [(f64, f64); 3] = [
 /// vgc - Vertex-oriented Great Circle projection.
 /// Based on the slice and dice approach from this article:
 /// http://dx.doi.org/10.1559/152304006779500687
-pub struct Vgc{
+pub struct Vgc {
     pub radius: f64,
 }
 
-impl Default for Vgc{
+impl Default for Vgc {
     fn default() -> Self {
-        Self{
+        Self {
             radius: WGS84::AUTHALIC_RADIUS,
         }
     }
@@ -171,9 +174,8 @@ impl Projection for Vgc {
     ) -> Vec<Point> {
         let mut out: Vec<Point> = vec![];
         let polyhedron = polyhedron.unwrap();
-        let coef_fourier_auth_to_geod =
-            Self::fourier_coefficients(KarneyCoefficients::AUTHALIC_TO_GEODETIC);
-        let r = 6371007.181_f64;
+        let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
+        let r = self.radius;
 
         for position in positions {
             // ForwardCartesian.face is 1-indexed (see geo_to_cartesian), polyhedron APIs are 0-indexed
@@ -208,23 +210,23 @@ impl Projection for Vgc {
             let a = SUB_TRIANGLE_TEMPLATE[0];
             let c = SUB_TRIANGLE_TEMPLATE[2];
 
-let bp_x = p_x_local - b.0;
-let bp_y = p_y_local - b.1;
-let ac_x = c.0 - a.0;
-let ac_y = c.1 - a.1;
+            let bp_x = p_x_local - b.0;
+            let bp_y = p_y_local - b.1;
+            let ac_x = c.0 - a.0;
+            let ac_y = c.1 - a.1;
 
-// B + t*(P-B) = A + s*(C-A)
-// t*bp_x - s*ac_x = a.0 - b.0
-// t*bp_y - s*ac_y = a.1 - b.1
-let rhs_x = a.0 - b.0;
-let rhs_y = a.1 - b.1;
-let det = bp_x * (-ac_y) - bp_y * (-ac_x);
-// t is the parameter such that D = B + t*(P-B); since P = B + xy*(D-B), t = 1/xy
-let t = (rhs_x * (-ac_y) - rhs_y * (-ac_x)) / det;
-let s = (bp_x * rhs_y - bp_y * rhs_x) / det;
+            // B + t*(P-B) = A + s*(C-A)
+            // t*bp_x - s*ac_x = a.0 - b.0
+            // t*bp_y - s*ac_y = a.1 - b.1
+            let rhs_x = a.0 - b.0;
+            let rhs_y = a.1 - b.1;
+            let det = bp_x * (-ac_y) - bp_y * (-ac_x);
+            // t is the parameter such that D = B + t*(P-B); since P = B + xy*(D-B), t = 1/xy
+            let t = (rhs_x * (-ac_y) - rhs_y * (-ac_x)) / det;
+            let s = (bp_x * rhs_y - bp_y * rhs_x) / det;
 
-let xy = 1.0 / t;
-let uv = 1.0 - s;
+            let xy = 1.0 / t;
+            let uv = 1.0 - s;
 
             // STEP 5: get sub-triangle 3D vertices, then invert slice_and_dice to recover
             // the true angular distances ap (A→P) and bp (B→P)
@@ -239,9 +241,11 @@ let uv = 1.0 - s;
 
             // STEP 7: 3D → authalic lat/lon → geodetic lat/lon
             let lat_auth = point_p.z.asin();
-            let lon = point_p.y.atan2(point_p.x);
-            let lat_geod = Self::lat_authalic_to_geodetic(lat_auth, &coef_fourier_auth_to_geod);
-            out.push(Point::new(lon.to_degrees(), lat_geod.to_degrees()));
+            let lon_auth = point_p.y.atan2(point_p.x);
+            out.push(sphere.to_geodetic(AuthalicCoord {
+                lon: lon_auth,
+                lat: lat_auth,
+            }));
         }
         out
     }
@@ -251,14 +255,20 @@ let uv = 1.0 - s;
     fn compute_distortion(&self, lat: f64, lon: f64, polyhedron: &Polyhedron) -> DistortionMetrics {
         let epsilon = 1e-5_f64; // degrees
         let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
-        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lon, lat));
+        let to_authalic = |lon: f64, lat: f64| sphere.to_authalic(Point::new(lon, lat));
 
-        let center_xy = 
+        let center_xy =
             &self.geo_to_cartesian(vec![to_authalic(lon, lat)], Some(polyhedron), None)[0];
-        let north_xy =
-            &self.geo_to_cartesian(vec![to_authalic(lon, lat + epsilon)], Some(polyhedron), None)[0];
-        let east_xy = 
-            &self.geo_to_cartesian(vec![to_authalic(lon + epsilon, lat)], Some(polyhedron), None)[0];
+        let north_xy = &self.geo_to_cartesian(
+            vec![to_authalic(lon, lat + epsilon)],
+            Some(polyhedron),
+            None,
+        )[0];
+        let east_xy = &self.geo_to_cartesian(
+            vec![to_authalic(lon + epsilon, lat)],
+            Some(polyhedron),
+            None,
+        )[0];
         if center_xy.face != north_xy.face || center_xy.face != east_xy.face {
             return DistortionMetrics {
                 h: f64::NAN,
@@ -563,7 +573,7 @@ mod tests {
         constants::WGS84,
         ellipsoid::{AuthalicCoord, AuthalicSphere},
         projections::{
-            polyhedron::{icosahedron, Orientation},
+            polyhedron::{Orientation, icosahedron},
             projections::{traits::Projection, vgc::Vgc},
         },
     };
@@ -572,7 +582,7 @@ mod tests {
     /// (radians, already on the WGS84 authalic sphere) the same way real
     /// callers of `Vgc::geo_to_cartesian` are now required to.
     fn to_authalic(p: Point) -> AuthalicCoord {
-        AuthalicSphere::from_ellipsoid(&WGS84).convert(p)
+        AuthalicSphere::from_ellipsoid(&WGS84).to_authalic(p)
     }
 
     #[test]
@@ -622,7 +632,10 @@ mod tests {
         let porto = Point::new(-8.61099, 41.14961); // ~300km north of Lisbon
         let madrid = Point::new(-3.70379, 40.41678); // ~500km east of Lisbon
 
-        let points = vec![lisbon, porto, madrid].into_iter().map(to_authalic).collect();
+        let points = vec![lisbon, porto, madrid]
+            .into_iter()
+            .map(to_authalic)
+            .collect();
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         // Check they're on reasonable faces
@@ -698,8 +711,14 @@ mod tests {
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         let points = vec![
-            AuthalicCoord { lon: -9.222154_f64.to_radians(), lat: 38.695125_f64.to_radians() },
-            AuthalicCoord { lon: 99.72721_f64.to_radians(), lat: 25.82577_f64.to_radians() },
+            AuthalicCoord {
+                lon: -9.222154_f64.to_radians(),
+                lat: 38.695125_f64.to_radians(),
+            },
+            AuthalicCoord {
+                lon: 99.72721_f64.to_radians(),
+                lat: 25.82577_f64.to_radians(),
+            },
         ];
 
         let result = projection.geo_to_cartesian(points, Some(&icosahedron), None);
@@ -730,7 +749,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip_many_points() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         let points = vec![
             Point::new(-9.222154, 38.695125),
@@ -743,7 +762,8 @@ mod tests {
             Point::new(66.665798, -77.717034),
             Point::new(63.501735, 80.099071),
         ];
-        let fwd = projection.geo_to_cartesian(points.clone(), Some(&icosahedron), None);
+        let authalic_points: Vec<AuthalicCoord> = points.iter().copied().map(to_authalic).collect();
+        let fwd = projection.geo_to_cartesian(authalic_points, Some(&icosahedron), None);
         let inv = projection.cartesian_to_geo(fwd, Some(&icosahedron));
         let mut max_err = 0.0_f64;
         for (orig, back) in points.iter().zip(inv.iter()) {
@@ -759,10 +779,10 @@ mod tests {
 
     #[test]
     fn test_roundtrip_debug() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         let lisbon = Point::new(-9.49420, 38.68499);
-        let fwd = projection.geo_to_cartesian(vec![lisbon], Some(&icosahedron), None);
+        let fwd = projection.geo_to_cartesian(vec![to_authalic(lisbon)], Some(&icosahedron), None);
         let inv = projection.cartesian_to_geo(fwd, Some(&icosahedron));
         println!("INVERSE: {:?}  (original {:?})", inv[0], lisbon);
         assert!((inv[0].x() - lisbon.x()).abs() < 1e-6);

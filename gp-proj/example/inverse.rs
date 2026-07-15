@@ -9,9 +9,7 @@
 
 use geo::Point;
 use gp_proj::{
-    constants::WGS84,
-    ellipsoid::AuthalicSphere,
-    projections::{
+    constants::WGS84, ellipsoid::AuthalicSphere, projections::{
         polyhedron::{Orientation, icosahedron},
         projections::{traits::Projection, vgc::Vgc},
     },
@@ -39,46 +37,16 @@ pub fn main() -> () {
     let projection = Vgc::default();
     let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
-    for (i, p) in icosahedron.vertices().iter().enumerate() {
-        println!("{:?}", (p.x, p.y, p.z));
-    }
-
     let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
     let authalic_points = points.iter().map(|p| sphere.to_authalic(*p)).collect();
-    let coords = projection.geo_to_cartesian(authalic_points, Some(&icosahedron), None);
+    let forward = projection.geo_to_cartesian(authalic_points, Some(&icosahedron), None);
 
-    for (i, p) in coords.iter().enumerate() {
-        println!(
-            "({:>10.4}, {:>10.4}) -> face={} x={:.4} y={:.4}",
-            points[i].x(),
-            points[i].y(),
-            p.face,
-            p.coords.x,
-            p.coords.y
-        );
-    }
-    let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron);
-    println!("h: {} (expected: 0.7580403)", distortion.h);
-    println!("k: {} (expected: 1.333174)", distortion.k);
-    println!(
-        "Angular deformation: {}° (expected: 33.045°)",
-        distortion.angular_deformation
-    );
-    println!("Areal scale: {} (expected: ~1.0)", distortion.areal_scale);
-
-    let forward = projection.geo_to_cartesian(
-        vec![sphere.to_authalic(Point::new(-9.494, 38.685))],
-        Some(&icosahedron),
-        None,
-    );
     let inverse = projection.cartesian_to_geo(forward, Some(&icosahedron));
-    println!("original:  lat=38.685, lon=-9.494");
+
+    println!("original:  lat={}, lon={}", points[0].y(), points[0].x());
     println!(
         "recovered: lat={:.6}, lon={:.6}",
         inverse[0].y(),
         inverse[0].x()
     );
 }
-
-
-

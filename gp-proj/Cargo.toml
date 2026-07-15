@@ -18,3 +18,7 @@ path = "example/basic.rs"
 name = "polygon"
 path = "example/polygon.rs"
 
+[[example]]
+name = "inverse"
+path = "example/inverse.rs"
+
