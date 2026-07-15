@@ -12,7 +12,7 @@ use std::f64::consts::{E, PI};
 use crate::{
     constants::WGS84, ellipsoid::{AuthalicCoord, AuthalicSphere}, models::vector_3d::Vector3D, projections::{
         layout::traits::Layout,
-        polyhedron::{ArcLengths, Polyhedron},
+        polyhedron::{spherical_geometry::stable_angle_between, ArcLengths, Polyhedron},
         projections::traits::{DistortionMetrics, ForwardCartesian, Projection},
     },
     utils::shape::triangle,
@@ -145,16 +145,6 @@ impl Projection for Vgc {
                         SUB_TRIANGLE_TEMPLATE,
                         sub_vertices_in_face,
                     );
-println!("ab={:.10} bc={:.10} ac={:.10}", ab, bc, ac);
-println!("ap={:.10} bp={:.10}", ap, bp);
-println!("xy={:.10} uv={:.10}", xy, uv);
-println!("p_local=({:.10}, {:.10})", p_x_local, p_y_local);
-println!("sub_triangle_id={}", sub_triangle_id);
-println!("sub_triangle_3d: mid=({:.6},{:.6},{:.6}) corner=({:.6},{:.6},{:.6}) center=({:.6},{:.6},{:.6})",
-    sub_triangle_3d.0[0].x, sub_triangle_3d.0[0].y, sub_triangle_3d.0[0].z,
-    sub_triangle_3d.0[1].x, sub_triangle_3d.0[1].y, sub_triangle_3d.0[1].z,
-    sub_triangle_3d.0[2].x, sub_triangle_3d.0[2].y, sub_triangle_3d.0[2].z,
-);
                     // Authalic radius
                     let r = self.radius;
                     out.push(ForwardCartesian {
@@ -186,7 +176,8 @@ println!("sub_triangle_3d: mid=({:.6},{:.6},{:.6}) corner=({:.6},{:.6},{:.6}) ce
         let r = 6371007.181_f64;
 
         for position in positions {
-            let face = usize::from(position.face);
+            // ForwardCartesian.face is 1-indexed (see geo_to_cartesian), polyhedron APIs are 0-indexed
+            let face = usize::from(position.face) - 1;
             let sub_triangle_id = position.sub_triangle_id;
 
             // STEP 1: divide out radius
@@ -228,33 +219,28 @@ let ac_y = c.1 - a.1;
 let rhs_x = a.0 - b.0;
 let rhs_y = a.1 - b.1;
 let det = bp_x * (-ac_y) - bp_y * (-ac_x);
-let t = (rhs_x * (-ac_y) - rhs_y * (-ac_x)) / det;  // xy
-let s = (bp_x * rhs_y - bp_y * rhs_x) / det;         // uv (parameter along A→C, so uv = 1-s... check)
+// t is the parameter such that D = B + t*(P-B); since P = B + xy*(D-B), t = 1/xy
+let t = (rhs_x * (-ac_y) - rhs_y * (-ac_x)) / det;
+let s = (bp_x * rhs_y - bp_y * rhs_x) / det;
 
-let xy = t;
-let uv = 1.0 - s;  // si
+let xy = 1.0 / t;
+let uv = 1.0 - s;
 
-            // STEP 5: recover arc lengths from xy and uv
-            // get sub-triangle 3D vertices
+            // STEP 5: get sub-triangle 3D vertices, then invert slice_and_dice to recover
+            // the true angular distances ap (A→P) and bp (B→P)
             let sub_triangle_3d = triangle_by_id(polyhedron, face, sub_triangle_id);
             let ArcLengths {
                 ab, bc, ac: ac_len, ..
             } = polyhedron.arc_lengths(sub_triangle_3d, Vector3D::zero());
+            let [ap, bp] = inverse_slice_and_dice(sub_triangle_3d, ac_len, ab, bc, xy, uv);
 
-            // inverse slice_and_dice: recover ap and bp
-            let [ap, bp] = inverse_slice_and_dice(ac_len, ab, bc, xy, uv);
-
-            // STEP 6: reconstruct 3D point from sub-triangle vertices and arc lengths
+            // STEP 6: reconstruct 3D point via spherical trilateration from A, B and ap, bp
             let point_p = reconstruct_point(sub_triangle_3d, ap, bp);
 
             // STEP 7: 3D → authalic lat/lon → geodetic lat/lon
             let lat_auth = point_p.z.asin();
             let lon = point_p.y.atan2(point_p.x);
             let lat_geod = Self::lat_authalic_to_geodetic(lat_auth, &coef_fourier_auth_to_geod);
-println!("p_x_face={:.10} p_y_face={:.10}", p_x_face, p_y_face);
-println!("p_x_local={:.10} p_y_local={:.10}", p_x_local, p_y_local);
-println!("xy_recovered={:.10} uv_recovered={:.10}", xy, uv);
-println!("ap_recovered={:.10} bp_recovered={:.10}", ap, bp);
             out.push(Point::new(lon.to_degrees(), lat_geod.to_degrees()));
         }
         out
@@ -456,6 +442,7 @@ pub fn triangle_by_id(polyhedron: &Polyhedron, face: usize, sub_triangle_id: u8)
 }
 
 pub fn inverse_slice_and_dice(
+    sub_triangle: [Vector3D; 3], // [mid=A, corner=B, center=C]
     ac: f64,
     ab: f64,
     bc: f64,
@@ -465,9 +452,15 @@ pub fn inverse_slice_and_dice(
     // Numerical inversion via Newton's method
     // We search for (ap, bp) such that slice_and_dice(ac,ab,bc,ap,bp) = [xy_target, uv_target]
 
-    // Initial guess: linear approximation
-    let mut ap = xy_target * ab;
-    let mut bp = uv_target * bc;
+    // Initial guess: bootstrap from the (approximate, ~0.1-0.2 deg off) slerp reconstruction
+    // instead of a naive linear guess. The naive `xy_target*ab, uv_target*bc` guess can land
+    // outside the triangle's valid (ap,bp) region, saturating slice_and_dice's internal clamps
+    // and making the finite-difference Jacobian exactly singular before a single step is taken.
+    let [a, b, c] = sub_triangle;
+    let d = slerp(c, a, uv_target);
+    let p_approx = slerp(b, d, xy_target);
+    let mut ap = stable_angle_between(a, p_approx);
+    let mut bp = stable_angle_between(b, p_approx);
 
     let eps = 1e-10_f64;
     let h = 1e-7_f64; // finite difference step
@@ -511,28 +504,37 @@ pub fn inverse_slice_and_dice(
     [ap, bp]
 }
 
-/// Reconstruct a 3D unit vector on the sphere given a sub-triangle
-/// [mid=A, corner=B, center=C] and arc lengths ap (B→P) and bp (along AC direction).
+/// Reconstruct a 3D unit vector on the sphere given a sub-triangle [mid=A, corner=B, center=C]
+/// and the true angular distances ap = angle(A,P), bp = angle(B,P), via spherical trilateration.
 ///
-/// Strategy:
-/// 1. Find point D on AC at parameter uv: D = slerp(A, C, uv)
-/// 2. Find point P on BD at parameter xy: P = slerp(B, D, xy)
+/// P is written as P = x*A + y*B + z*N (N = A×B), solving the two dot-product constraints
+/// A·P = cos(ap) and B·P = cos(bp) for x, y, then |P| = 1 for z. This has two solutions
+/// (mirrored across the plane through A and B); the one on the same side as the sub-triangle's
+/// center C is the correct one.
 pub fn reconstruct_point(sub_triangle: [Vector3D; 3], ap: f64, bp: f64) -> Vector3D {
     let [a, b, c] = sub_triangle; // [mid, corner, center]
 
-    // We need uv and xy, but we have ap and bp (arc lengths)
-    // ap = xy * ab, bp = uv * bc
-    let ab = a.dot(b);
-    let bc = b.dot(c);
+    let ab_dot = a.dot(b);
+    let ca = ap.cos();
+    let cb = bp.cos();
+    let denom = 1.0 - ab_dot * ab_dot;
 
-    let xy = (ap / ab).clamp(0.0, 1.0);
-    let uv = (bp / bc).clamp(0.0, 1.0);
+    let x = (ca - ab_dot * cb) / denom;
+    let y = (cb - ab_dot * ca) / denom;
 
-    // D = slerp(A, C, uv)
-    let d = slerp(a, c, uv);
+    let n = a.cross(b);
+    let z = ((1.0 - x * x - y * y - 2.0 * x * y * ab_dot) / n.dot(n))
+        .max(0.0)
+        .sqrt();
 
-    // P = slerp(B, D, xy)
-    slerp(b, d, xy)
+    let p_plus = a.scale(x).add(b.scale(y)).add(n.scale(z)).normalize();
+    let p_minus = a.scale(x).add(b.scale(y)).add(n.scale(-z)).normalize();
+
+    if p_plus.dot(c) >= p_minus.dot(c) {
+        p_plus
+    } else {
+        p_minus
+    }
 }
 
 /// Spherical linear interpolation between two unit vectors at parameter t ∈ [0,1].
@@ -724,5 +726,46 @@ mod tests {
             "Areal scale: {} (expected: ~1.0 for equal-area)",
             distortion.areal_scale
         );
+    }
+
+    #[test]
+    fn test_roundtrip_many_points() {
+        let projection = Vgc;
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+        let points = vec![
+            Point::new(-9.222154, 38.695125),
+            Point::new(-138.97503, 47.7022),
+            Point::new(99.72721, 25.82577),
+            Point::new(-64.10552, 12.89276),
+            Point::new(-128.28185, -50.60992),
+            Point::new(-70.47681, -0.81784),
+            Point::new(152.44705, -21.59114),
+            Point::new(66.665798, -77.717034),
+            Point::new(63.501735, 80.099071),
+        ];
+        let fwd = projection.geo_to_cartesian(points.clone(), Some(&icosahedron), None);
+        let inv = projection.cartesian_to_geo(fwd, Some(&icosahedron));
+        let mut max_err = 0.0_f64;
+        for (orig, back) in points.iter().zip(inv.iter()) {
+            let dlon = (orig.x() - back.x()).abs();
+            let dlat = (orig.y() - back.y()).abs();
+            let err = dlon.max(dlat);
+            println!("orig={:?} back={:?} err={:.3e}", orig, back, err);
+            max_err = max_err.max(err);
+        }
+        println!("MAX ERROR (degrees) = {:.3e}", max_err);
+        assert!(max_err < 1e-6, "roundtrip error too large: {:.3e}", max_err);
+    }
+
+    #[test]
+    fn test_roundtrip_debug() {
+        let projection = Vgc;
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+        let lisbon = Point::new(-9.49420, 38.68499);
+        let fwd = projection.geo_to_cartesian(vec![lisbon], Some(&icosahedron), None);
+        let inv = projection.cartesian_to_geo(fwd, Some(&icosahedron));
+        println!("INVERSE: {:?}  (original {:?})", inv[0], lisbon);
+        assert!((inv[0].x() - lisbon.x()).abs() < 1e-6);
+        assert!((inv[0].y() - lisbon.y()).abs() < 1e-6);
     }
 }
