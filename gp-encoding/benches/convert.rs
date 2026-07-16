@@ -8,7 +8,7 @@
 // except according to those terms.
 
 use std::path::{Path, PathBuf};
-use criterion::{Criterion, criterion_group, criterion_main, black_box};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main, black_box};
 use geoplegma::types::{DggrsUid, Point, RefinementLevel};
 use gp_encoding::{ZarrBackend, convert_geotiff_file_to_backend, StorageBackend};
 use gp_encoding::query::query_value_for_point;
@@ -147,21 +147,24 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
         }
 
         group.bench_function(&file_name, |b| {
-            b.iter(|| {
-                // Ensure output directory is clean before the run
-                if output_store.exists() {
-                    let _ = std::fs::remove_dir_all(&output_store);
-                }
+            b.iter_batched(
+                || {
+                    if output_store.exists() {
+                        let _ = std::fs::remove_dir_all(&output_store);
+                    }
+                },
+                |_| {
+                    let res = convert_geotiff_file_to_backend::<ZarrBackend>(
+                        black_box(&file_path),
+                        black_box(&output_store),
+                        black_box(DggrsUid::H3),
+                        black_box(None),
+                    );
 
-                let res = convert_geotiff_file_to_backend::<ZarrBackend>(
-                    black_box(&file_path),
-                    black_box(&output_store),
-                    black_box(DggrsUid::H3),
-                    black_box(None),
-                );
-
-                assert!(res.is_ok(), "Conversion failed: {:?}", res.err());
-            })
+                    assert!(res.is_ok(), "Conversion failed: {:?}", res.err());
+                },
+                BatchSize::SmallInput,
+            )
         });
 
         // Clean up output directories after benchmarking this file
