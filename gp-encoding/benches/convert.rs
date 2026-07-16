@@ -17,6 +17,10 @@ use gdal::{Dataset, GeoTransformEx};
 use gdal::spatial_ref::{CoordTransform, SpatialRef};
 use rand::Rng;
 
+// benchmark configuration
+const DGGRS_TYPES: &[DggrsUid] = &[DggrsUid::H3];
+const BANDS: &[i32] = &[1];
+
 
 fn find_tiff_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
@@ -98,7 +102,7 @@ struct SizeComparison {
     output_size: u64,
 }
 
-fn bench_convert_geotiffs(c: &mut Criterion) {
+fn bench_convert_geotiffs_impl(c: &mut Criterion, dggrs_type: DggrsUid) {
     // Hardcoded folder with input GeoTIFF files
     let folder = Path::new("benches/files");
     let output_base = Path::new("benches/bench_out");
@@ -109,7 +113,8 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
         return;
     }
 
-    let mut group = c.benchmark_group("convert_geotiff");
+    let group_name = format!("convert_geotiff_{:?}", dggrs_type);
+    let mut group = c.benchmark_group(&group_name);
     // Limit sample size and measurement time because file conversion is slow
     group.sample_size(10);
     group.measurement_time(std::time::Duration::from_secs(10));
@@ -125,7 +130,7 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
             continue;
         }
 
-        let output_store = output_base.join(format!("bench_{}", file_path.file_stem().unwrap().to_string_lossy()));
+        let output_store = output_base.join(format!("bench_{:?}_{}", dggrs_type, file_path.file_stem().unwrap().to_string_lossy()));
 
         // Run once to measure size
         if output_store.exists() {
@@ -134,7 +139,7 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
         let res = convert_geotiff_file_to_backend::<ZarrBackend>(
             &file_path,
             &output_store,
-            DggrsUid::H3,
+            dggrs_type,
             None,
         );
         if res.is_ok() {
@@ -157,7 +162,7 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
                     let res = convert_geotiff_file_to_backend::<ZarrBackend>(
                         black_box(&file_path),
                         black_box(&output_store),
-                        black_box(DggrsUid::H3),
+                        black_box(dggrs_type),
                         black_box(None),
                     );
 
@@ -178,7 +183,7 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
     // Print and write size report
     if !comparisons.is_empty() {
         println!("\n┌────────────────────────────────────────────────────────────────────────────────────────┐");
-        println!("│                              GeoTIFF to Zarr Size Report                               │");
+        println!("│              GeoTIFF to Zarr Size Report ({:?})                           │", dggrs_type);
         println!("├──────────────────────┬──────────────────┬──────────────────┬───────────────────────────┤");
         println!("│ {:<20} │ {:<16} │ {:<16} │ {:<25} │", "File Name", "Input Size", "Output Size", "Ratio (Out/In)");
         println!("├──────────────────────┼──────────────────┼──────────────────┼───────────────────────────┤");
@@ -197,9 +202,9 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
         if let Err(e) = std::fs::create_dir_all(output_base) {
             eprintln!("Warning: Failed to create output directory for report: {:?}", e);
         } else {
-            let report_path = output_base.join("size_report.md");
+            let report_path = output_base.join(format!("size_report_{:?}.md", dggrs_type));
             let mut md_content = String::new();
-            md_content.push_str("# GeoTIFF to Zarr Size Comparison Report\n\n");
+            md_content.push_str(&format!("# GeoTIFF to Zarr Size Comparison Report ({:?})\n\n", dggrs_type));
             md_content.push_str("| File Name | Input Size | Output Size | Ratio (Out/In) |\n");
             md_content.push_str("| :--- | :--- | :--- | :--- |\n");
             for comp in &comparisons {
@@ -220,6 +225,12 @@ fn bench_convert_geotiffs(c: &mut Criterion) {
     }
 }
 
+fn bench_convert_geotiffs(c: &mut Criterion) {
+    for &dggrs_type in DGGRS_TYPES {
+        bench_convert_geotiffs_impl(c, dggrs_type);
+    }
+}
+
 struct AccuracyComparison {
     file_name: String,
     samples_count: usize,
@@ -227,7 +238,7 @@ struct AccuracyComparison {
     mismatches_count: usize,
 }
 
-fn bench_query_accuracy(c: &mut Criterion) {
+fn bench_query_accuracy_impl(c: &mut Criterion, dggrs_type: DggrsUid, band_num: i32) {
     let folder = Path::new("benches/files");
     let output_base = Path::new("benches/bench_out");
 
@@ -237,7 +248,8 @@ fn bench_query_accuracy(c: &mut Criterion) {
         return;
     }
 
-    let mut group = c.benchmark_group("query_accuracy");
+    let group_name = format!("query_accuracy_{:?}_band{}", dggrs_type, band_num);
+    let mut group = c.benchmark_group(&group_name);
     group.sample_size(10);
     group.measurement_time(std::time::Duration::from_secs(5));
 
@@ -251,7 +263,7 @@ fn bench_query_accuracy(c: &mut Criterion) {
             continue;
         }
 
-        let output_store = output_base.join(format!("accuracy_{}", file_path.file_stem().unwrap().to_string_lossy()));
+        let output_store = output_base.join(format!("accuracy_{:?}_band{}_{}", dggrs_type, band_num, file_path.file_stem().unwrap().to_string_lossy()));
 
         if output_store.exists() {
             let _ = std::fs::remove_dir_all(&output_store);
@@ -260,7 +272,7 @@ fn bench_query_accuracy(c: &mut Criterion) {
         let conversion_res = convert_geotiff_file_to_backend::<ZarrBackend>(
             &file_path,
             &output_store,
-            DggrsUid::H3,
+            dggrs_type,
             None,
         );
 
@@ -319,10 +331,10 @@ fn bench_query_accuracy(c: &mut Criterion) {
             }
         };
 
-        let band = match dataset.rasterband(1) {
+        let band = match dataset.rasterband(band_num as usize) {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("Warning: Failed to get rasterband 1: {:?}", e);
+                eprintln!("Warning: Failed to get rasterband {}: {:?}", band_num, e);
                 let _ = std::fs::remove_dir_all(&output_store);
                 continue;
             }
@@ -412,7 +424,7 @@ fn bench_query_accuracy(c: &mut Criterion) {
 
     if !accuracy_reports.is_empty() {
         println!("\n┌────────────────────────────────────────────────────────────────────────────────────────┐");
-        println!("│                            gp-encoding Query Accuracy Report                           │");
+        println!("│      gp-encoding Query Accuracy Report ({:?}, Band {})                          │", dggrs_type, band_num);
         println!("├──────────────────────┬───────────────┬───────────────┬───────────────┬─────────────────┤");
         println!("│ {:<20} │ {:<13} │ {:<13} │ {:<13} │ {:<15} │", "File Name", "Total Samples", "Matches", "Mismatches", "Match Rate");
         println!("├──────────────────────┼───────────────┼───────────────┼───────────────┼─────────────────┤");
@@ -436,9 +448,9 @@ fn bench_query_accuracy(c: &mut Criterion) {
         if let Err(e) = std::fs::create_dir_all(output_base) {
             eprintln!("Warning: Failed to create output directory for accuracy report: {:?}", e);
         } else {
-            let report_path = output_base.join("accuracy_report.md");
+            let report_path = output_base.join(format!("accuracy_report_{:?}_band{}.md", dggrs_type, band_num));
             let mut md_content = String::new();
-            md_content.push_str("# gp-encoding Query Accuracy Report\n\n");
+            md_content.push_str(&format!("# gp-encoding Query Accuracy Report ({:?}, Band {})\n\n", dggrs_type, band_num));
             md_content.push_str("| File Name | Total Samples | Matches | Mismatches | Match Rate |\n");
             md_content.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
             for report in &accuracy_reports {
@@ -461,6 +473,14 @@ fn bench_query_accuracy(c: &mut Criterion) {
             } else {
                 println!("Accuracy report successfully written to {:?}", report_path);
             }
+        }
+    }
+}
+
+fn bench_query_accuracy(c: &mut Criterion) {
+    for &dggrs_type in DGGRS_TYPES {
+        for &band_num in BANDS {
+            bench_query_accuracy_impl(c, dggrs_type, band_num);
         }
     }
 }
