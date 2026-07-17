@@ -20,6 +20,7 @@ use rand::Rng;
 // benchmark configuration
 const DGGRS_TYPES: &[DggrsUid] = &[DggrsUid::H3];
 const BANDS: &[i32] = &[1];
+const SAMPLE_SIZE: usize = 1000;
 
 
 fn find_tiff_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
@@ -344,7 +345,7 @@ fn bench_query_accuracy_impl(c: &mut Criterion, dggrs_type: DggrsUid, band_num: 
         let dtype = &backend.metadata().attributes[0].dtype;
 
         let mut rng = rand::thread_rng();
-        let sample_size = 1000;
+        let sample_size = SAMPLE_SIZE;
         let mut samples = Vec::with_capacity(sample_size);
 
         for _ in 0..sample_size {
