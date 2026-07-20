@@ -502,20 +502,104 @@ mod tests {
         }
     }
 
+    /// VGC is proven equal-area by construction (van Leeuwen & Strebe 2006):
+    /// the slice-and-dice method preserves area exactly, so `areal_scale`
+    /// (the Tissot indicatrix's Jacobian determinant, p*q*sin(theta')) must
+    /// equal 1.0 at every point on the sphere, independent of any external
+    /// tool. This replaces a prior Geocart-derived single-point comparison
+    /// that was never actually asserted and whose numbers no longer apply
+    /// (see PR description for why no Geocart-based test replaces it).
+    /// (Lisbon is kept as one of the sample points for continuity with the
+    /// old test.)
     #[test]
-    fn test_distortion() {
+    fn test_distortion_areal_scale_is_unity() {
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-        let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron, &WGS84);
-        println!("h: {} (expected: 0.7580403)", distortion.h);
-        println!("k: {} (expected: 1.333174)", distortion.k);
-        println!(
-            "Angular deformation: {}° (expected: 33.045°)",
-            distortion.angular_deformation
+
+        let points = [
+            (38.68499, -9.49420),   // Lisbon
+            (-33.8688, 151.2093),   // Sydney
+            (64.1466, -21.9426),    // Reykjavik
+            (1.3521, 103.8198),     // Singapore, near-equator
+            (-89.0, 0.0),           // near south pole
+        ];
+
+        // compute_distortion uses a fixed 1e-5° finite-difference step. Near
+        // sub-triangle interpolation seams (not just polyhedron edges/cusps)
+        // the piecewise-affine map's local curvature is higher, which widens
+        // discretization error in areal_scale beyond the ~1e-3 noise floor
+        // seen at points away from seams (e.g. Lisbon: 0.9986). Tolerance is
+        // set above that observed noise, not loosened to hide a real bug —
+        // it's still an order of magnitude tighter than the ~30% mismatch
+        // the old (buggy) formula would have produced.
+        let tol = 0.02;
+        for (lat, lon) in points {
+            let distortion = projection.compute_distortion(lat, lon, &icosahedron, &WGS84);
+            if !distortion.areal_scale.is_finite() {
+                continue; // epsilon probe crossed a face boundary; skip
+            }
+            assert!(
+                (distortion.areal_scale - 1.0).abs() < tol,
+                "areal_scale = {} at ({}, {}), expected ~1.0 (equal-area)",
+                distortion.areal_scale,
+                lat,
+                lon
+            );
+        }
+    }
+
+    /// Cross-checks `compute_distortion`'s statistical behavior against
+    /// Table 1 of van Leeuwen & Strebe (2006): for the icosahedron under the
+    /// vertex-oriented great-circle projection, the 2ω angle-distortion
+    /// samples have mean μ = 0.141 rad and standard deviation σ = 0.028 rad.
+    /// The paper measures a, b numerically (small-circle sampling); this
+    /// samples points on a Fibonacci sphere and uses the closed-form
+    /// Tissot-indicatrix derivation instead, so the tolerances below are
+    /// generous rather than exact.
+    #[test]
+    fn test_distortion_matches_van_leeuwen_table1_icosahedron() {
+        let projection = Vgc::default();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+
+        let n = 2000;
+        let golden_angle = std::f64::consts::PI * (3.0 - 5.0_f64.sqrt());
+        let mut samples: Vec<f64> = Vec::with_capacity(n);
+
+        for i in 0..n {
+            // Fibonacci sphere: near-uniform point distribution over the globe.
+            let y = 1.0 - 2.0 * (i as f64 + 0.5) / n as f64;
+            let lat = y.asin().to_degrees();
+            let lon = (golden_angle * i as f64).to_degrees() % 360.0;
+
+            let distortion = projection.compute_distortion(lat, lon, &icosahedron, &WGS84);
+            if distortion.angular_deformation.is_finite() {
+                samples.push(distortion.angular_deformation.to_radians());
+            }
+        }
+
+        assert!(
+            samples.len() > n / 2,
+            "too many samples dropped (face-crossing epsilon probes): {} of {}",
+            samples.len(),
+            n
         );
-        println!(
-            "Areal scale: {} (expected: ~1.0 for equal-area)",
-            distortion.areal_scale
+
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let variance =
+            samples.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / samples.len() as f64;
+        let std_dev = variance.sqrt();
+
+        println!("2ω samples: n={}, mean={:.4} rad, std={:.4} rad", samples.len(), mean, std_dev);
+
+        assert!(
+            (mean - 0.141).abs() < 0.05,
+            "mean 2ω = {:.4} rad, expected ~0.141 rad (Table 1, icosahedron/VGC)",
+            mean
+        );
+        assert!(
+            (std_dev - 0.028).abs() < 0.03,
+            "std 2ω = {:.4} rad, expected ~0.028 rad (Table 1, icosahedron/VGC)",
+            std_dev
         );
     }
 }
