@@ -26,12 +26,22 @@ To get the list of available commands and options, use:
 cargo run -p gp-encoding -- --help
 ```
 
-### Vector Metadata
+## Raster files
 
-Vector output is similar to GeoJSON, but with some additional metadata:
+The CLI utility can convert raster files (GeoTIFF, etc.) into the internal format. The output will be a Zarr file containing the encoded raster data and metadata. You can read more about the Zarr format [here](https://zarr.readthedocs.io/en/stable/).
+
+Each level of the pyramid is stored as a separate group in the Zarr file. On each level, the raster data is stored in chunks, each corresponding to a cell of lower resolution. The chunk size is automatically determined based on the resolution of the raster. New levels can be added to the pyramid with the `add-level` command, which will create a new group in Zarr.
+
+### Vector files
+
+The CLI utility can convert vector files (GeoJSON, Shapefile, etc.) into the internal format. The output will be a JSON file containing the encoded geometries and metadata.
+
+This vector output is similar to GeoJSON, but with some additional metadata:
 
 - `dggrs`: the DGGRS used for the conversion, such as `H3`.
 - `refinement_level`: the refinement level used to encode the geometries.
+
+By default, the maximum refinement level of the target DGGRS is used, but you can specify a different level with the `--level` option.
 
 ### Viewer
 
