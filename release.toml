@@ -1,0 +1,6 @@
+shared-version = true
+consolidate-commits = true
+tag-name = "v{{version}}"
+tag-message = "Release {{crate_name}} {{version}}"
+push = true
+publish = true # crates with `publish = false` in their own Cargo.toml are skipped automatically

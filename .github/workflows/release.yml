@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches workspace version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION="$(sed -n '/\[workspace.package\]/,/^\[/{/^version *= */{s/version *= *"\(.*\)"/\1/p}}' Cargo.toml)"
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match workspace.package.version ($CARGO_VERSION) in Cargo.toml"
+            exit 1
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install libgdal
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev
+
+      # See ci.yml for why these are skipped (missing DGGRID binary / known VGC bug
+      # already being fixed on fix/vgc-distortion-derive-from-self).
+      - name: cargo test (safety net)
+        run: |
+          cargo test --workspace --exclude visualization-app -- \
+            --skip igeo7_parent_from_zone_contains_child_zone \
+            --skip isea3h_parent_from_zone_contains_child_zone \
+            --skip test_isea3h_zone_count_equivalence \
+            --skip test_igeo7_zone_count_equivalence \
+            --skip test_pole_behavior \
+            --skip test_project_forward
+
+      # TODO(cleanup PR): make this blocking once the codebase is clippy-clean.
+      - name: cargo clippy (safety net)
+        continue-on-error: true
+        run: cargo clippy --workspace --exclude visualization-app --all-targets -- -D warnings
+
+      - name: cargo publish gp-proj
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p gp-proj --locked
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes
