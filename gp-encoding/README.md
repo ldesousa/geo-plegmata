@@ -4,6 +4,14 @@ This crate contains the tools used by GeoPlegma for encoding geospatial data int
 
 The `viewer-3d` crate is able to read the encoded data from this crate and provides a way to visualize it.
 
+## Dependencies
+
+This sub-crate depends on the following external libraries:
+- GDAL development files
+- Clang compiler 
+
+On Debian based systems these dependencies are met with the packages `gdal-dev` and `clang`.
+
 ## Building
 
 Build the crate directly with `cargo`:
