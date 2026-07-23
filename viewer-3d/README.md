@@ -9,13 +9,15 @@ To build and run the visualization app, follow these steps:
 
 1. Make sure to install all the Tauri dependencies on your system. You can find the prerequisites [here](https://tauri.app/start/prerequisites/).
 
-2. Install the node dependencies by running the following command in the terminal:
+2. Intall the `pnpm` package manager, following the [install instructions for your system](https://pnpm.io/installation).
+
+3. Install the node dependencies by running the following command in the terminal:
 
 ```bash
 pnpm install
 ```
 
-3. Run the development app with the following command:
+4. Run the development app with the following command:
 
 ```bash
 pnpm tauri dev
