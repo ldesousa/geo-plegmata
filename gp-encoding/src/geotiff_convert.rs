@@ -172,7 +172,7 @@ fn get_closest_refinement_level(
 
     println!("world pixel count: {}", world_pixel_count);
     let mut best_level: Option<RefinementLevel> = None;
-    let mut best_diff = u64::MAX;
+    let mut best_diff = f64::MAX;
 
     let min_level = grid.min_refinement_level()?;
     let max_level = grid.max_refinement_level()?;
@@ -182,16 +182,20 @@ fn get_closest_refinement_level(
 
         let zone_count = grid.zone_count(level)?;
 
-        let diff = world_pixel_count.abs_diff(zone_count);
+        let ratio = if world_pixel_count > zone_count {
+            world_pixel_count as f64 / zone_count as f64
+        } else {
+            zone_count as f64 / world_pixel_count as f64
+        };
 
-        if diff < best_diff {
-            best_diff = diff;
+        if ratio < best_diff {
+            best_diff = ratio;
             best_level = Some(level);
         }
     }
-    let diff_percentage = (best_diff as f64 / world_pixel_count as f64) * 100.0;
+    let diff_percentage = (best_diff - 1.0) * 100.0;
     println!(
-        "best level: {} with diff {}",
+        "best level: {} with diff {}%",
         best_level.unwrap().get(),
         diff_percentage
     );
