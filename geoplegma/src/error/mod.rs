@@ -11,12 +11,14 @@ pub mod dggal;
 pub mod dggrid;
 pub mod factory;
 pub mod h3o;
+pub mod hex9;
 pub mod port;
 
 use crate::error::dggal::DggalError;
 use crate::error::dggrid::DggridError;
 use crate::error::factory::FactoryError;
 use crate::error::h3o::H3oError;
+use crate::error::hex9::Hex9Error;
 use crate::types::{RefinementLevel, RelativeDepth};
 use std::num::ParseFloatError;
 use thiserror::Error;
@@ -34,6 +36,9 @@ pub enum DggrsError {
 
     #[error("H3o error: {0}")]
     H3o(#[from] H3oError),
+
+    #[error("HEX9 error: {0}")]
+    Hex9(#[from] Hex9Error),
 
     #[error("Depth must be non-negative, got {0}")]
     DepthBelowZero(i32),

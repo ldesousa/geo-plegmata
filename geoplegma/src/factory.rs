@@ -8,7 +8,8 @@
 // except according to those terms.
 
 use crate::adapters::{
-    dggal::grids::DggalImpl, dggrid::igeo7::Igeo7Impl, dggrid::isea3h::Isea3hImpl, h3o::h3::H3Impl,
+    dggal::grids::DggalImpl, dggrid::igeo7::Igeo7Impl, dggrid::isea3h::Isea3hImpl,
+    h3o::h3::H3Impl, hex9::grids::Hex9Impl,
 };
 use crate::api::DggrsApi;
 use crate::constants::DGGRS_SPECS;
@@ -39,6 +40,11 @@ pub fn get(id: DggrsUid) -> Result<Arc<dyn DggrsApi>, FactoryError> {
             | DggrsUid::RTEA9R
             | DggrsUid::IVEA7H
             | DggrsUid::IVEA7H_Z7 => Ok(Arc::new(DggalImpl::new(id))), // change DggalImpl::new to take DggrsId
+            _ => Err(DggrsUidError::Unsupported { id }.into()),
+        },
+
+        DggrsImplementation::HEX9 => match id {
+            DggrsUid::HEX9 => Ok(Arc::new(Hex9Impl::new(id))),
             _ => Err(DggrsUidError::Unsupported { id }.into()),
         },
 

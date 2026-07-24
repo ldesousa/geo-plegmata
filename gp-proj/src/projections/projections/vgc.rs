@@ -1,6 +1,6 @@
 // Copyright 2025 contributors to the GeoPlegmata project.
 // Originally authored by João Manuel (GeoInsight GmbH, joao.manuel@geoinsight.ai)
-//
+// Co-authored by Sunayana Ghosh (Independent Researcher, sunayanag@gmail.com)
 // Licenced under the Apache Licence, Version 2.0 <LICENCE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 // <LICENCE-MIT or http://opensource.org/licenses/MIT>, at your
@@ -10,9 +10,7 @@
 use std::f64::consts::{E, PI};
 
 use crate::{
-    constants::KarneyCoefficients,
-    models::vector_3d::Vector3D,
-    projections::{
+    constants::WGS84, ellipsoid::{AuthalicCoord, AuthalicSphere}, models::vector_3d::Vector3D, projections::{
         layout::traits::Layout,
         polyhedron::{ArcLengths, Polyhedron},
         projections::traits::{DistortionMetrics, ForwardCartesian, Projection},
@@ -68,30 +66,31 @@ const FACE_TEMPLATE_DOWN: [(f64, f64); 3] = [
 /// vgc - Vertex-oriented Great Circle projection.
 /// Based on the slice and dice approach from this article:
 /// http://dx.doi.org/10.1559/152304006779500687
-pub struct Vgc;
+pub struct Vgc{
+    pub radius: f64,
+}
+
+impl Default for Vgc{
+    fn default() -> Self {
+        Self{
+            radius: WGS84::AUTHALIC_RADIUS,
+        }
+    }
+}
 
 impl Projection for Vgc {
     fn geo_to_cartesian(
         &self,
-        positions: Vec<Point>,
+        positions: Vec<AuthalicCoord>,
         polyhedron: Option<&Polyhedron>,
         _layout: Option<&dyn Layout>,
     ) -> Vec<ForwardCartesian> {
         let mut out: Vec<ForwardCartesian> = vec![];
         let polyhedron = polyhedron.unwrap();
 
-        // Need the coeficcients to convert from geodetic to authalic
-        let coef_fourier_geod_to_auth =
-            Self::fourier_coefficients(KarneyCoefficients::GEODETIC_TO_AUTHALIC);
-
         for position in positions {
-            let lon = position.x().to_radians();
-            let lat = Self::lat_geodetic_to_authalic(
-                position.y().to_radians(),
-                &coef_fourier_geod_to_auth,
-            );
             // Calculate 3d unit vectors for point P
-            let point_p = Vector3D::from_array(Self::to_3d(lat, lon));
+            let point_p = Vector3D::from_array(Self::to_3d(position.lat, position.lon));
             // starting from here, you need:
             // - the 3d point that you want to project
             // Polyhedron faces
@@ -148,7 +147,7 @@ impl Projection for Vgc {
                     );
 
                     // Authalic radius
-                    let r = 6371007.181;
+                    let r = self.radius;
                     out.push(ForwardCartesian {
                         coords: Coord {
                             x: p_x_face * r,
@@ -173,14 +172,15 @@ impl Projection for Vgc {
     // Calculate distortion and compare with Geocart values
     fn compute_distortion(&self, lat: f64, lon: f64, polyhedron: &Polyhedron) -> DistortionMetrics {
         let epsilon = 1e-5_f64; // degrees
+        let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
+        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lon, lat));
 
-        let center_xy =
-            &self.geo_to_cartesian(vec![Point::new(lon, lat)], Some(polyhedron), None)[0];
+        let center_xy = 
+            &self.geo_to_cartesian(vec![to_authalic(lon, lat)], Some(polyhedron), None)[0];
         let north_xy =
-            &self.geo_to_cartesian(vec![Point::new(lon, lat + epsilon)], Some(polyhedron), None)[0];
-        let east_xy =
-            &self.geo_to_cartesian(vec![Point::new(lon + epsilon, lat)], Some(polyhedron), None)[0];
-
+            &self.geo_to_cartesian(vec![to_authalic(lon, lat + epsilon)], Some(polyhedron), None)[0];
+        let east_xy = 
+            &self.geo_to_cartesian(vec![to_authalic(lon + epsilon, lat)], Some(polyhedron), None)[0];
         if center_xy.face != north_xy.face || center_xy.face != east_xy.face {
             return DistortionMetrics {
                 h: f64::NAN,
@@ -339,10 +339,21 @@ fn affine_transform_triangle(
 mod tests {
     use geo::Point;
 
-    use crate::projections::{
-        polyhedron::{icosahedron, Orientation},
-        projections::{traits::Projection, vgc::Vgc},
+    use crate::{
+        constants::WGS84,
+        ellipsoid::{AuthalicCoord, AuthalicSphere},
+        projections::{
+            polyhedron::{icosahedron, Orientation},
+            projections::{traits::Projection, vgc::Vgc},
+        },
     };
+
+    /// Test helper: converts a degrees geodetic `Point` to an `AuthalicCoord`
+    /// (radians, already on the WGS84 authalic sphere) the same way real
+    /// callers of `Vgc::geo_to_cartesian` are now required to.
+    fn to_authalic(p: Point) -> AuthalicCoord {
+        AuthalicSphere::from_ellipsoid(&WGS84).convert(p)
+    }
 
     #[test]
     fn test_point_creation() {
@@ -363,10 +374,13 @@ mod tests {
         let p7 = Point::new(152.44705, -21.59114);
         let p8 = Point::new(66.665798, -77.717034);
         let p9 = Point::new(63.501735, 80.099071);
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-        let result =
-            projection.geo_to_cartesian(vec![p1, p2, p3, p4, p5, p6, p7, p8, p9], Some(&icosahedron), None);
+        let points = vec![p1, p2, p3, p4, p5, p6, p7, p8, p9]
+            .into_iter()
+            .map(to_authalic)
+            .collect();
+        let result = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         assert_eq!(result[0].face, 8);
         assert_eq!(result[1].face, 5);
@@ -381,14 +395,15 @@ mod tests {
 
     #[test]
     fn test_spatial_consistency() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         // Test points
         let lisbon = Point::new(-9.49420, 38.68499);
         let porto = Point::new(-8.61099, 41.14961); // ~300km north of Lisbon
         let madrid = Point::new(-3.70379, 40.41678); // ~500km east of Lisbon
 
-        let results = projection.geo_to_cartesian(vec![lisbon, porto, madrid], Some(&icosahedron), None);
+        let points = vec![lisbon, porto, madrid].into_iter().map(to_authalic).collect();
+        let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         // Check they're on reasonable faces
         println!("Lisbon face: {}", results[0].face);
@@ -405,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_pole_behavior() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         // Points around the pole should be on adjacent faces
@@ -415,7 +430,10 @@ mod tests {
             Point::new(144.0, 89.0),
             Point::new(216.0, 89.0),
             Point::new(288.0, 89.0),
-        ];
+        ]
+        .into_iter()
+        .map(to_authalic)
+        .collect();
 
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
@@ -435,11 +453,13 @@ mod tests {
 
     #[test]
     fn test_equator_distribution() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         // Points evenly distributed around equator
-        let points: Vec<Point> = (0..10).map(|i| Point::new(i as f64 * 36.0, 0.0)).collect();
+        let points: Vec<AuthalicCoord> = (0..10)
+            .map(|i| to_authalic(Point::new(i as f64 * 36.0, 0.0)))
+            .collect();
 
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
@@ -449,9 +469,31 @@ mod tests {
         println!("Unique faces at equator: {:?}", unique_faces);
         assert!(unique_faces.len() >= 5, "Should span multiple faces");
     }
+    /// Demonstrates the projection is testable independent of any ellipsoid:
+    /// a unit-sphere `Vgc` fed `AuthalicCoord`s directly (no `AuthalicSphere`
+    /// conversion involved) still produces sane, small-magnitude output.
+    #[test]
+    fn test_unit_sphere_projection() {
+        let projection = Vgc { radius: 1.0 };
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+
+        let points = vec![
+            AuthalicCoord { lon: -9.222154_f64.to_radians(), lat: 38.695125_f64.to_radians() },
+            AuthalicCoord { lon: 99.72721_f64.to_radians(), lat: 25.82577_f64.to_radians() },
+        ];
+
+        let result = projection.geo_to_cartesian(points, Some(&icosahedron), None);
+
+        assert_eq!(result.len(), 2);
+        for r in &result {
+            assert!(r.coords.x.abs() < 2.0);
+            assert!(r.coords.y.abs() < 2.0);
+        }
+    }
+
     #[test]
     fn test_distortion() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron);
         println!("h: {} (expected: 0.7580403)", distortion.h);
