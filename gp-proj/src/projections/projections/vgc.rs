@@ -416,11 +416,6 @@ mod tests {
         let points = vec![lisbon, porto, madrid].into_iter().map(to_authalic).collect();
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
-        // Check they're on reasonable faces
-        println!("Lisbon face: {}", results[0].face);
-        println!("Porto face: {}", results[1].face);
-        println!("Madrid face: {}", results[2].face);
-
         // Porto should be on same or adjacent face to Lisbon
         // (they're only 300km apart)
         assert!(
@@ -449,11 +444,7 @@ mod tests {
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         // All should be near pole (check they're on the 5 faces around the north pole)
-        for (i, result) in results.iter().enumerate() {
-            println!(
-                "Point {} - Face: {}, Coords: {:?}",
-                i, result.face, result.coords
-            );
+        for result in results.iter() {
             let is_in_north_pole = match result.face {
                 0 | 2 | 4 | 6 | 8 => true,
                 _ => false,
@@ -477,7 +468,6 @@ mod tests {
         // Should hit multiple different faces
         let unique_faces: std::collections::HashSet<_> = results.iter().map(|r| r.face).collect();
 
-        println!("Unique faces at equator: {:?}", unique_faces);
         assert!(unique_faces.len() >= 5, "Should span multiple faces");
     }
     /// Demonstrates the projection is testable independent of any ellipsoid:
@@ -588,8 +578,6 @@ mod tests {
         let variance =
             samples.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / samples.len() as f64;
         let std_dev = variance.sqrt();
-
-        println!("2ω samples: n={}, mean={:.4} rad, std={:.4} rad", samples.len(), mean, std_dev);
 
         assert!(
             (mean - 0.141).abs() < 0.05,
