@@ -8,7 +8,7 @@
 // except according to those terms
 
 use crate::{
-    Vector3D, ellipsoid::AuthalicCoord, projections::{layout::traits::Layout, polyhedron::Polyhedron}
+    Vector3D, ellipsoid::{AuthalicCoord, Ellipsoid}, projections::{layout::traits::Layout, polyhedron::Polyhedron}
 };
 use geo::{Coord, Point};
 
@@ -46,6 +46,7 @@ pub trait Projection {
         lat: f64,
         lon: f64,
         polyhedron: &Polyhedron,
+        ellipsoid: &dyn Ellipsoid,
     ) -> DistortionMetrics;
 
     fn to_3d(lat: f64, lon: f64) -> [f64; 3] {
