@@ -21,6 +21,8 @@ rand = "0.8.5"
 tracing = "0.1.41"
 h3o = { version = "0.8.0", features = ["geo"] }
 dggal-rust = { git = "https://github.com/GeoPlegma/dggal-rust.git", branch = "dggal-0.0.6" }
+# libhex9 FFI bindings — the Hex9 / H9 DGGRS backend (the -sys crate lives at geoplegma/).
+hex9-sys = { git = "https://github.com/MrBenGriffin/libhex9", tag = "v1.0.0" }
 rayon = "1.10.0"
 thiserror = "2.0.12"
 once_cell = "1.21.0"
@@ -32,6 +34,8 @@ serde = ["dep:serde"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+# Direct FFI access in tests/hex9.rs to exercise libhex9's enumeration ceiling.
+hex9-sys = { git = "https://github.com/MrBenGriffin/libhex9", tag = "v1.0.0" }
 
 [[bench]]
 name = "dggrs"

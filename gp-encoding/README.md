@@ -31,7 +31,7 @@ cargo run -p gp-encoding -- --help
 Here is an example of how to use the CLI utility to convert a GeoTIFF file, create a pyramid, and query some statistics about the raster:
 
 ```bash
-cargo run -p gp-encoding -- convert-geotiff --input input.tif --output output.zarr --dggrs H3 --report
+cargo run -p gp-encoding -- convert --input input.tif --output output.zarr --dggrs H3 --report
 cargo run -p gp-encoding -- add-level --store output.zarr --target-level 5
 cargo run -p gp-encoding -- stats --store output.zarr
 ```

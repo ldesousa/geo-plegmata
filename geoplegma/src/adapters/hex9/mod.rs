@@ -7,7 +7,9 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-pub mod dggrid;
-pub mod dggal;
-pub mod h3o;
-pub mod hex9;
+//! The libhex9-backed Hex9 (H9) DGGRS adapter — an aperture-9 hexagonal grid
+//! with self-contained 16-byte UUID addresses, bound via the `hex9-sys` crate.
+
+pub mod common;
+pub mod context;
+pub mod grids;
