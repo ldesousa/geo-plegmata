@@ -149,7 +149,20 @@ class GeoPlegmaPlugin:
             """
             prop = QgsProperty.fromExpression(expr)
             symbol.symbolLayer(0).setDataDefinedProperty(QgsSymbolLayer.PropertyFillColor, prop)
+        elif "band_0" in bands:
+            b0_val = first_cell.get("band_0", 0)
+            multiplier = 255 if b0_val <= 1.0 else 1
             
+            expr = f"""
+            color_rgb(
+                coalesce("band_0", 0) * {multiplier},
+                coalesce("band_0", 0) * {multiplier},
+                coalesce("band_0", 0) * {multiplier}
+            )
+            """
+            prop = QgsProperty.fromExpression(expr)
+            symbol.symbolLayer(0).setDataDefinedProperty(QgsSymbolLayer.PropertyFillColor, prop)
+     
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
         layer.triggerRepaint()
 
