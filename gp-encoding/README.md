@@ -20,7 +20,7 @@ Build the crate directly with `cargo`:
 cargo build -p gp-encoding
 ```
 
-## Usage
+## CLI Usage
 
 To run the CLI utility, use:
 
@@ -32,6 +32,65 @@ To get the list of available commands and options, use:
 
 ```bash
 cargo run -p gp-encoding -- --help
+```
+
+## Library Usage
+
+To use `gp-encoding` as a library in your Rust project, add it to your `Cargo.toml`:
+
+```toml
+[dependencies]
+gp-encoding = { path = "../gp-encoding" }
+geoplegma = { path = "../geoplegma" }
+```
+
+You can then use the provided functions to convert raster and vector files programmatically.
+
+### Raster Conversion Example
+
+To convert a raster file (like a GeoTIFF) to the Zarr-based internal format:
+
+```rust
+use std::path::Path;
+use gp_encoding::{convert_to_backend, ZarrBackend, Compression};
+use geoplegma::types::DggrsUid;
+
+fn main() {
+    let input_raster = "input.tif";
+    let output_zarr = Path::new("output.zarr");
+
+    convert_to_backend::<ZarrBackend>(
+        input_raster,
+        None, // optional subdataset
+        output_zarr,
+        DggrsUid::H3,
+        Some(Compression::Gzip),
+    ).expect("Conversion failed");
+    
+    println!("Successfully converted: {:?}", conversion_report);
+}
+```
+
+### Vector Conversion Example
+
+To convert a vector file (like GeoJSON or Shapefile) into a JSON representation encoding the geometries into a specific DGGRS:
+
+```rust
+use std::path::Path;
+use gp_encoding::convert_vector_file_to_json;
+use geoplegma::types::DggrsUid;
+
+fn main() {
+    let input_vector = Path::new("input.geojson");
+    let output_json = Path::new("output.json");
+    
+    convert_vector_file_to_json(
+        input_vector,
+        output_json,
+        DggrsUid::H3,
+        7, // refinement level
+    ).expect("Vector conversion failed");
+}
 ```
 
 ## Raster files
