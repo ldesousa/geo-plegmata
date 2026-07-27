@@ -7,21 +7,19 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+mod config;
+
 use std::path::{Path, PathBuf};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main, black_box};
 use geoplegma::types::{DggrsUid, Point, RefinementLevel};
-use gp_encoding::{ZarrBackend, convert_geotiff_file_to_backend, StorageBackend};
+use gp_encoding::{ZarrBackend, convert_to_backend, StorageBackend};
 use gp_encoding::query::query_value_for_point;
 use gp_encoding::value::decode_value_to_f64;
 use gdal::{Dataset, GeoTransformEx};
 use gdal::spatial_ref::{CoordTransform, SpatialRef};
 use rand::Rng;
 
-// benchmark configuration
-const DGGRS_TYPES: &[DggrsUid] = &[DggrsUid::H3];
-const BANDS: &[i32] = &[1];
-const SAMPLE_SIZE: usize = 1000;
-
+use config::{BANDS, DGGRS_TYPES, SAMPLE_SIZE};
 
 fn find_tiff_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
@@ -137,8 +135,9 @@ fn bench_convert_geotiffs_impl(c: &mut Criterion, dggrs_type: DggrsUid) {
         if output_store.exists() {
             let _ = std::fs::remove_dir_all(&output_store);
         }
-        let res = convert_geotiff_file_to_backend::<ZarrBackend>(
-            &file_path,
+        let res = convert_to_backend::<ZarrBackend>(
+            &file_path.to_str().unwrap_or_default(),
+            None,
             &output_store,
             dggrs_type,
             None,
@@ -160,11 +159,12 @@ fn bench_convert_geotiffs_impl(c: &mut Criterion, dggrs_type: DggrsUid) {
                     }
                 },
                 |_| {
-                    let res = convert_geotiff_file_to_backend::<ZarrBackend>(
-                        black_box(&file_path),
-                        black_box(&output_store),
-                        black_box(dggrs_type),
-                        black_box(None),
+                    let res = convert_to_backend::<ZarrBackend>(
+                        &file_path.to_str().unwrap_or_default(),
+                        None,
+                        &output_store,
+                        dggrs_type,
+                        None,
                     );
 
                     assert!(res.is_ok(), "Conversion failed: {:?}", res.err());
@@ -270,8 +270,9 @@ fn bench_query_accuracy_impl(c: &mut Criterion, dggrs_type: DggrsUid, band_num: 
             let _ = std::fs::remove_dir_all(&output_store);
         }
 
-        let conversion_res = convert_geotiff_file_to_backend::<ZarrBackend>(
-            &file_path,
+        let conversion_res = convert_to_backend::<ZarrBackend>(
+            &file_path.to_str().unwrap_or_default(),
+            None,
             &output_store,
             dggrs_type,
             None,
