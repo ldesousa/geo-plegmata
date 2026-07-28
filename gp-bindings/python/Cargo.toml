@@ -1,0 +1,18 @@
+[package]
+name = "geoplegma-py"
+version = "0.2.1"
+edition = "2024"
+authors = ["GeoPlegma Developers"]
+description = "Python bindings for GeoPlegma (gp-encoding)"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "geoplegma_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20", features = ["extension-module", "abi3-py38"] }
+gp-encoding = { path = "../../gp-encoding" }
+geoplegma = { path = "../../geoplegma" }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
