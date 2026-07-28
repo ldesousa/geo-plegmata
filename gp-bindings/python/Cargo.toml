@@ -1,9 +1,8 @@
 [package]
 name = "geoplegma-py"
-version = "0.2.1"
 edition = "2024"
 authors = ["GeoPlegma Developers"]
-description = "Python bindings for GeoPlegma (gp-encoding)"
+description = "Python bindings for GeoPlegma"
 license = "MIT OR Apache-2.0"
 
 [lib]
