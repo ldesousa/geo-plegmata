@@ -8,7 +8,8 @@
 // except according to those terms.
 
 use crate::error::EncodingError;
-use gdal::vector::{FieldValue, LayerAccess};
+use gdal::spatial_ref::{AxisMappingStrategy, SpatialRef};
+use gdal::vector::{FieldValue, Geometry as GdalGeometry, LayerAccess};
 use gdal::Dataset;
 use geoplegma::api::DggrsApi;
 use geoplegma::types::{DggrsUid, RefinementLevel};
@@ -82,6 +83,30 @@ fn geo_to_geojson_value(geom: &Geometry<f64>) -> Value {
         }),
         _ => Value::Null,
     }
+}
+
+fn wgs84_spatial_ref() -> Result<SpatialRef, EncodingError> {
+    let mut wgs84 = SpatialRef::from_epsg(4326)?;
+    wgs84.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
+    Ok(wgs84)
+}
+
+fn normalized_geometry_to_wgs84(
+    geom: &GdalGeometry,
+    source_srs: Option<&SpatialRef>,
+) -> Result<GdalGeometry, EncodingError> {
+    let mut normalized = geom.clone();
+
+    if let Some(source_srs) = source_srs {
+        let mut src_srs = source_srs.clone();
+        src_srs.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
+
+        let wgs84 = wgs84_spatial_ref()?;
+        normalized.set_spatial_ref(src_srs);
+        normalized.transform_to_inplace(&wgs84)?;
+    }
+
+    Ok(normalized)
 }
 
 fn convert_coord_array(
@@ -232,6 +257,7 @@ pub fn convert_vector_file_to_json(
 
     if layer_count == 1 {
         let mut layer = dataset.layer(0)?;
+        let layer_srs = layer.spatial_ref();
         let defn = layer.defn();
         let fields_schema: Vec<(usize, String)> = defn
             .fields()
@@ -252,7 +278,8 @@ pub fn convert_vector_file_to_json(
 
             let mut geom_val = Value::Null;
             if let Some(gdal_geom) = feature.geometry() {
-                let geo_geom = gdal_geom.to_geo()?;
+                let normalized_geom = normalized_geometry_to_wgs84(gdal_geom, layer_srs.as_ref())?;
+                let geo_geom = normalized_geom.to_geo()?;
                 geom_val = geo_to_geojson_value(&geo_geom);
                 convert_geojson_in_place(&mut geom_val, grid.as_ref(), refinement_level)?;
             }
@@ -271,6 +298,7 @@ pub fn convert_vector_file_to_json(
         for idx in 0..layer_count {
             let mut layer = dataset.layer(idx)?;
             let layer_name = layer.name();
+            let layer_srs = layer.spatial_ref();
             let defn = layer.defn();
             let fields_schema: Vec<(usize, String)> = defn
                 .fields()
@@ -291,7 +319,8 @@ pub fn convert_vector_file_to_json(
 
                 let mut geom_val = Value::Null;
                 if let Some(gdal_geom) = feature.geometry() {
-                    let geo_geom = gdal_geom.to_geo()?;
+                    let normalized_geom = normalized_geometry_to_wgs84(gdal_geom, layer_srs.as_ref())?;
+                    let geo_geom = normalized_geom.to_geo()?;
                     geom_val = geo_to_geojson_value(&geo_geom);
                     convert_geojson_in_place(&mut geom_val, grid.as_ref(), refinement_level)?;
                 }
