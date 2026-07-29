@@ -22,10 +22,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install libgdal
+      # libgdal-dev: gp-encoding's gdal dependency (built with the bindgen feature).
+      # cmake + libclang-dev: geoplegma's hex9-sys dependency builds the libhex9 C
+      # core via cmake and generates its bindings with bindgen (needs libclang).
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgdal-dev
+          sudo apt-get install -y libgdal-dev cmake libclang-dev
 
       # TODO(cleanup PR): drop `continue-on-error` once the codebase is fmt-clean
       # and clippy-clean, then make these blocking like `cargo test` below.
@@ -37,19 +40,14 @@ jobs:
         continue-on-error: true
         run: cargo clippy --workspace --exclude visualization-app --all-targets -- -D warnings
 
-      # --skip entries are pre-existing, known failures unrelated to CI setup:
-      # - *_parent_from_zone_contains_child_zone / *_zone_count_equivalence (igeo7/isea3h)
-      #   require the external DGGRID binary, which CI doesn't install (see README's
-      #   manual DGGRID setup step) — not something `apt-get` can provide.
-      # - test_pole_behavior / test_project_forward (gp-proj vgc.rs) are a known-broken
-      #   VGC distortion bug already being fixed on branch fix/vgc-distortion-derive-from-self.
-      # Remove each --skip once its fix lands.
+      # --skip entries are pre-existing failures unrelated to CI setup:
+      # *_parent_from_zone_contains_child_zone / *_zone_count_equivalence (igeo7/isea3h)
+      # require the external DGGRID binary, which CI doesn't install (see README's
+      # manual DGGRID setup step) — not something `apt-get` can provide.
       - name: cargo test
         run: |
           cargo test --workspace --exclude visualization-app -- \
             --skip igeo7_parent_from_zone_contains_child_zone \
             --skip isea3h_parent_from_zone_contains_child_zone \
             --skip test_isea3h_zone_count_equivalence \
-            --skip test_igeo7_zone_count_equivalence \
-            --skip test_pole_behavior \
-            --skip test_project_forward
+            --skip test_igeo7_zone_count_equivalence

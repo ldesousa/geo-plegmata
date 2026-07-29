@@ -33,22 +33,21 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install libgdal
+      # See ci.yml for why cmake/libclang-dev are needed (hex9-sys builds via cmake
+      # + bindgen).
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgdal-dev
+          sudo apt-get install -y libgdal-dev cmake libclang-dev
 
-      # See ci.yml for why these are skipped (missing DGGRID binary / known VGC bug
-      # already being fixed on fix/vgc-distortion-derive-from-self).
+      # See ci.yml for why these are skipped (missing DGGRID binary).
       - name: cargo test (safety net)
         run: |
           cargo test --workspace --exclude visualization-app -- \
             --skip igeo7_parent_from_zone_contains_child_zone \
             --skip isea3h_parent_from_zone_contains_child_zone \
             --skip test_isea3h_zone_count_equivalence \
-            --skip test_igeo7_zone_count_equivalence \
-            --skip test_pole_behavior \
-            --skip test_project_forward
+            --skip test_igeo7_zone_count_equivalence
 
       # TODO(cleanup PR): make this blocking once the codebase is clippy-clean.
       - name: cargo clippy (safety net)

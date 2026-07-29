@@ -33,10 +33,10 @@ GeoPlegma uses two long-lived branches:
 Both branches are protected on GitHub:
 
 - **`master`**: requires a PR before merging, requires the `ci` status check to
-  pass, requires at least 1 approving review, requires linear history, and
+  pass, requires at least 2 approving reviews, requires linear history, and
   disallows direct or force pushes.
-- **`develop`**: requires the `ci` status check to pass before merging; review
-  is not required.
+- **`develop`**: requires a PR before merging, requires the `ci` status check
+  to pass, and requires at least 1 approving review.
 
 (These are configured directly in the repo's branch protection settings by a
 maintainer with admin rights — there's nothing to set up locally.)
