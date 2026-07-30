@@ -4,6 +4,7 @@ authors = ["João Manuel <joao.manuel@geoinsight.ai>"]
 edition = "2024"
 name = "gp-bindings-js"
 version = "0.0.0"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]

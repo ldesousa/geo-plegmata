@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, master]
+  push:
+    branches: [develop, master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # libgdal-dev: gp-encoding's gdal dependency (built with the bindgen feature).
+      # cmake + libclang-dev: geoplegma's hex9-sys dependency builds the libhex9 C
+      # core via cmake and generates its bindings with bindgen (needs libclang).
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev cmake libclang-dev
+
+      # TODO(cleanup PR): drop `continue-on-error` once the codebase is fmt-clean
+      # and clippy-clean, then make these blocking like `cargo test` below.
+      - name: cargo fmt --check
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        continue-on-error: true
+        run: cargo clippy --workspace --exclude visualization-app --all-targets -- -D warnings
+
+      # --skip entries are pre-existing failures unrelated to CI setup:
+      # *_parent_from_zone_contains_child_zone / *_zone_count_equivalence (igeo7/isea3h)
+      # require the external DGGRID binary, which CI doesn't install (see README's
+      # manual DGGRID setup step) — not something `apt-get` can provide.
+      - name: cargo test
+        run: |
+          cargo test --workspace --exclude visualization-app -- \
+            --skip igeo7_parent_from_zone_contains_child_zone \
+            --skip isea3h_parent_from_zone_contains_child_zone \
+            --skip test_isea3h_zone_count_equivalence \
+            --skip test_igeo7_zone_count_equivalence
