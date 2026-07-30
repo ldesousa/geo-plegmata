@@ -9,7 +9,8 @@
 
 [package]
 name = "geoplegma"
-version = "0.2.5"
+version.workspace = true
+publish = false # blocked on crates.io: dggal-rust/hex9-sys deps below are git-only
 license = "MIT OR Apache-2.0"
 edition = "2024"
 readme = "README.md"
