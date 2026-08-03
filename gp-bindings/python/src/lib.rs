@@ -21,14 +21,16 @@ impl Store {
         Ok(self.backend.levels())
     }
 
-    fn export_level(&self, level: u32) -> PyResult<String> {
-        let cells = gp_encoding::query::export_level_as_visualization_json(&self.backend, level)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to export level: {}", e)))?;
-        
-        let json_str = serde_json::to_string(&cells)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to serialize to JSON: {}", e)))?;
-        
-        Ok(json_str)
+    fn export_level(&self, py: Python<'_>, level: u32) -> PyResult<String> {
+        py.allow_threads(|| {
+            let cells = gp_encoding::query::export_level_as_visualization_json(&self.backend, level)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to export level: {}", e)))?;
+            
+            let json_str = serde_json::to_string(&cells)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to serialize to JSON: {}", e)))?;
+            
+            Ok(json_str)
+        })
     }
 }
 
