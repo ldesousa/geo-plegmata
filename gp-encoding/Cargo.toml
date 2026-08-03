@@ -24,6 +24,8 @@ zarrs_filesystem = "0.3"
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8.5"
 
 [[bin]]
 name = "gp-encoding"
@@ -32,8 +34,4 @@ path = "src/main.rs"
 [[bench]]
 name = "convert"
 harness = false
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-rand = "0.8.5"
 
