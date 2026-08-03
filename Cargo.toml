@@ -1,5 +1,6 @@
 [workspace]
-members = ["geoplegma", "gp-bindings/js", "gp-encoding", "gp-proj", "viewer-3d/src-tauri"]
+members = ["geoplegma", "gp-bindings/js", "gp-bindings/python", "gp-encoding", "gp-proj"]
+
 exclude = ["tests", "diagrams", "docs"]
 resolver = "3"
 

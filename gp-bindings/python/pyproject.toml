@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "geoplegma_py"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+version = "0.2.1"
+description = "Python bindings for GeoPlegma"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "geoplegma_py"
