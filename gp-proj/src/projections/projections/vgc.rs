@@ -278,7 +278,7 @@ impl Projection for Vgc {
     ) -> DistortionMetrics {
         let epsilon = 1e-5_f64; // degrees
         let sphere = AuthalicSphere::from_ellipsoid(ellipsoid);
-        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lon, lat));
+        let to_authalic = |lon: f64, lat: f64| sphere.to_authalic(Point::new(lon, lat));
 
         let center_xy =
             &self.geo_to_cartesian(vec![to_authalic(lon, lat)], Some(polyhedron), None)[0];
