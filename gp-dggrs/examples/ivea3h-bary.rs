@@ -13,17 +13,6 @@ use geoplegma::types::RefinementLevel;
 use gp_dggrs::sys_api::DggrsSysApi;
 use gp_dggrs::impls::ivea3h_bary::IVEA3HBary;
 
-fn unbundle_index(zone_id:u64) -> (u64, u64, u64, u64) {
-
-    let bary_i = zone_id % 2_u64.pow(26);
-    let mut tail:u64 = zone_id / 2_u64.pow(26);
-    let bary_j = tail % 2_u64.pow(26); 
-    tail = tail / 2_u64.pow(26);
-    let face = tail % 2_u64.pow(5);
-    let level = tail / 2_u64.pow(5);
-
-    return (bary_i, bary_j, face, level);
-}
 
 /// This is just an example and basic testing function if there is output or not
 pub fn main() {
@@ -49,46 +38,46 @@ pub fn main() {
     println!("== Resolution 3 ==");
     println!("Point 1 {} {}", p1.x(), p1.y());
     let zone1 = system.zone_from_point(level, p1);
-    let mut unbundled = unbundle_index(zone1);
+    let mut unbundled = IVEA3HBary::unbundle_zone_id(zone1);
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
-    assert_eq!(unbundled.0, 1);
-    assert_eq!(unbundled.1, 1);   
-    assert_eq!(unbundled.2, 1);
+    assert_eq!(unbundled.0, 4);
+    assert_eq!(unbundled.1, 4);   
+    assert_eq!(unbundled.2, 3);
     assert_eq!(unbundled.3, 3);   
 
     println!("Point 2 {} {}", p2.x(), p2.y());
     let zone2 = system.zone_from_point(level, p2);
-    unbundled = unbundle_index(zone2);
+    unbundled = IVEA3HBary::unbundle_zone_id(zone2);
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
-    assert_eq!(unbundled.0, 1);
+    assert_eq!(unbundled.0, 4);
     assert_eq!(unbundled.1, 4);   
-    assert_eq!(unbundled.2, 1);
+    assert_eq!(unbundled.2, 5);
     assert_eq!(unbundled.3, 3);  
 
     println!("Point 3 {} {}", p3.x(), p3.y());
     let zone3 = system.zone_from_point(level, p3);
-    unbundled = unbundle_index(zone3);
+    unbundled = IVEA3HBary::unbundle_zone_id(zone3);
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
     assert_eq!(unbundled.0, 0);
-    assert_eq!(unbundled.1, 3);   
-    assert_eq!(unbundled.2, 3); 
+    assert_eq!(unbundled.1, 6);   
+    assert_eq!(unbundled.2, 9); 
     assert_eq!(unbundled.3, 3);   
 
     println!("Point 4 {} {}", p4.x(), p4.y());
     let zone4 = system.zone_from_point(level, p4);
-    unbundled = unbundle_index(zone4);
+    unbundled = IVEA3HBary::unbundle_zone_id(zone4);
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
-    assert_eq!(unbundled.0, 7);
+    assert_eq!(unbundled.0, 1);
     assert_eq!(unbundled.1, 1);   
-    assert_eq!(unbundled.2, 2);
+    assert_eq!(unbundled.2, 1);
     assert_eq!(unbundled.3, 3);   
 
     println!("Point 5 {} {}", p5.x(), p5.y());
     let zone5 = system.zone_from_point(level, p5);
-    unbundled = unbundle_index(zone5);
+    unbundled = IVEA3HBary::unbundle_zone_id(zone5);
     println!("Unbundled: i:{} j:{} Face:{} Level:{}", unbundled.0, unbundled.1, unbundled.2, unbundled.3);
-    assert_eq!(unbundled.0, 0);
-    assert_eq!(unbundled.1, 6);   
+    assert_eq!(unbundled.0, 2);
+    assert_eq!(unbundled.1, 2);   
     assert_eq!(unbundled.2, 9);
     assert_eq!(unbundled.3, 3);   
     
@@ -97,7 +86,7 @@ pub fn main() {
 //    println!("\n== Resolution 4 ==");
 //    println!("Point 1 {} {}", p1.x(), p1.y());
 //    let zone3 = system.zone_from_point(level, p1);
-//    unbundled = unbundle_index(zone3);
+//    unbundled = IVEA3HBary::unbundle_zone_id(zone3);
 //    assert_eq!(unbundled.0, 4);
 //    assert_eq!(unbundled.1, 2);   
 //    assert_eq!(unbundled.2, 10);
@@ -105,7 +94,7 @@ pub fn main() {
 //
 //    println!("Point 2 {} {}", p2.x(), p2.y());
 //    let zone4 = system.zone_from_point(level, p2);
-//    unbundled = unbundle_index(zone4);
+//    unbundled = IVEA3HBary::unbundle_zone_id(zone4);
 //    assert_eq!(unbundled.0, 2);
 //    assert_eq!(unbundled.1, 6);   
 //    assert_eq!(unbundled.2, 10);
@@ -116,7 +105,7 @@ pub fn main() {
 //    println!("\n== Resolution 5 ==");
 //    println!("Point 1 {} {}", p1.x(), p1.y());
 //    let zone3 = system.zone_from_point(level, p1);
-//    unbundled = unbundle_index(zone3);
+//    unbundled = IVEA3HBary::unbundle_zone_id(zone3);
 //    assert_eq!(unbundled.0, 12);
 //    assert_eq!(unbundled.1, 6);   
 //    assert_eq!(unbundled.2, 10);
@@ -124,7 +113,7 @@ pub fn main() {
 //
 //    println!("Point 2 {} {}", p2.x(), p2.y());
 //    let zone4 = system.zone_from_point(level, p2);
-//    unbundled = unbundle_index(zone4);
+//    unbundled = IVEA3HBary::unbundle_zone_id(zone4);
 //    assert_eq!(unbundled.0, 5);
 //    assert_eq!(unbundled.1, 17);   
 //    assert_eq!(unbundled.2, 10);
@@ -135,7 +124,7 @@ pub fn main() {
 //    println!("\n== Resolution 6 ==");
 //    println!("Point 1 {} {}", p1.x(), p1.y());
 //    let zone3 = system.zone_from_point(level, p1);
-//    unbundled = unbundle_index(zone3);
+//    unbundled = IVEA3HBary::unbundle_zone_id(zone3);
 //    assert_eq!(unbundled.0, 12);
 //    assert_eq!(unbundled.1, 6);   
 //    assert_eq!(unbundled.2, 10);
@@ -143,7 +132,7 @@ pub fn main() {
 //
 //    println!("Point 2 {} {}", p2.x(), p2.y());
 //    let zone4 = system.zone_from_point(level, p2);
-//    unbundled = unbundle_index(zone4);
+//    unbundled = IVEA3HBary::unbundle_zone_id(zone4);
 //    assert_eq!(unbundled.0, 6);
 //    assert_eq!(unbundled.1, 17);   
 //    assert_eq!(unbundled.2, 10);
@@ -151,7 +140,7 @@ pub fn main() {
 
     //println!("Point 3 {} {}", p3.x(), p3.y());
     //let zone5 = system.zone_from_point(level, p3);
-    //unbundled = unbundle_index(zone5);
+    //unbundled = IVEA3HBary::unbundle_zone_id(zone5);
     //assert_eq!(unbundled.0, 20);
     //assert_eq!(unbundled.1, 3);   
     //assert_eq!(unbundled.2, 10);

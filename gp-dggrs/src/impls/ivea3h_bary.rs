@@ -54,8 +54,27 @@ impl IVEA3HBary {
         return (point.x(), point.y(), (1.0 - point.x() - point.y()));
     }
 
-    fn bundle_index(_i: i32, _j: i32, _refinement_level: RefinementLevel, _face: i32) {
-        // do something
+    // Bundles barycentric coordinates on a icosahedron face into a 64-bit index
+    fn bundle_zone_id(&self, i: u32, j: u32, face: i32) -> u64 {
+        
+        return i as u64 +                           // i
+               j as u64 * 2_u64.pow(26) as u64 +    // j
+               face as u64 * 2_u64.pow(52) as u64 + // face
+               self.refinement_level.get() as u64 * 2_u64.pow(57) as u64;
+
+    }
+
+    // Unbundles a 64-bit zone identifier into barycentric coordinates and a face index
+    pub fn unbundle_zone_id(zone_id: u64) -> (u64, u64, u64, u64) {
+
+        let bary_i = zone_id % 2_u64.pow(26);
+        let mut tail:u64 = zone_id / 2_u64.pow(26);
+        let bary_j = tail % 2_u64.pow(26); 
+        tail = tail / 2_u64.pow(26);
+        let face = tail % 2_u64.pow(5);
+        let level = tail / 2_u64.pow(5);
+    
+        return (bary_i, bary_j, face, level);
     }
 
     // Computes distance with barycentric coordinates defined by an equilateral triangle.
@@ -272,10 +291,7 @@ impl DggrsSysApi for IVEA3HBary {
         println!("After edge cases: {:?}", unique);
 
         // Bundle index into 64 bit
-        return unique.0 as u64 +                        // i
-               unique.1 as u64 * 2_u64.pow(26) as u64 + // j
-               unique.2 as u64 * 2_u64.pow(52) as u64 + // face
-               self.refinement_level.get() as u64 * 2_u64.pow(57) as u64;
+        return IVEA3HBary::bundle_zone_id(self, unique.0, unique.1, unique.2);
     }
 }
 
