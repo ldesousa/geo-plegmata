@@ -61,6 +61,25 @@ impl WGS84 {
     pub const THIRD_FLATTENING: f64 = Self::FLATTENING / (2.0 - Self::FLATTENING);
 }
 
+
+impl crate::ellipsoid::Ellipsoid for WGS84 {
+    fn third_flattening(&self) -> f64 {
+        Self::THIRD_FLATTENING
+    }
+
+    fn authalic_radius(&self) -> f64 {
+        Self::AUTHALIC_RADIUS
+    }
+
+    fn major_axis(&self) -> f64 {
+        Self::MAJOR_AXIS
+    }
+
+    fn eccentricity_squared(&self) -> f64 {
+        Self::ECCENTRICITY_SQUARED
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

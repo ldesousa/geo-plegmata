@@ -1,6 +1,6 @@
 // Copyright 2025 contributors to the GeoPlegmata project.
 // Originally authored by João Manuel (GeoInsight GmbH, joao.manuel@geoinsight.ai)
-//
+// Co-authored by Sunayana Ghosh (Independent Researcher, sunayanag@gmail.com)
 // Licenced under the Apache Licence, Version 2.0 <LICENCE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 // <LICENCE-MIT or http://opensource.org/licenses/MIT>, at your
@@ -10,9 +10,7 @@
 use std::f64::consts::{E, PI};
 
 use crate::{
-    constants::KarneyCoefficients,
-    models::vector_3d::Vector3D,
-    projections::{
+    constants::WGS84, ellipsoid::{AuthalicCoord, AuthalicSphere, Ellipsoid}, models::vector_3d::Vector3D, projections::{
         layout::traits::Layout,
         polyhedron::{ArcLengths, Polyhedron},
         projections::traits::{DistortionMetrics, ForwardCartesian, Projection},
@@ -68,30 +66,31 @@ const FACE_TEMPLATE_DOWN: [(f64, f64); 3] = [
 /// vgc - Vertex-oriented Great Circle projection.
 /// Based on the slice and dice approach from this article:
 /// http://dx.doi.org/10.1559/152304006779500687
-pub struct Vgc;
+pub struct Vgc{
+    pub radius: f64,
+}
+
+impl Default for Vgc{
+    fn default() -> Self {
+        Self{
+            radius: WGS84::AUTHALIC_RADIUS,
+        }
+    }
+}
 
 impl Projection for Vgc {
     fn geo_to_cartesian(
         &self,
-        positions: Vec<Point>,
+        positions: Vec<AuthalicCoord>,
         polyhedron: Option<&Polyhedron>,
         _layout: Option<&dyn Layout>,
     ) -> Vec<ForwardCartesian> {
         let mut out: Vec<ForwardCartesian> = vec![];
         let polyhedron = polyhedron.unwrap();
 
-        // Need the coeficcients to convert from geodetic to authalic
-        let coef_fourier_geod_to_auth =
-            Self::fourier_coefficients(KarneyCoefficients::GEODETIC_TO_AUTHALIC);
-
         for position in positions {
-            let lon = position.x().to_radians();
-            let lat = Self::lat_geodetic_to_authalic(
-                position.y().to_radians(),
-                &coef_fourier_geod_to_auth,
-            );
             // Calculate 3d unit vectors for point P
-            let point_p = Vector3D::from_array(Self::to_3d(lat, lon));
+            let point_p = Vector3D::from_array(Self::to_3d(position.lat, position.lon));
             // starting from here, you need:
             // - the 3d point that you want to project
             // Polyhedron faces
@@ -148,14 +147,13 @@ impl Projection for Vgc {
                     );
 
                     // Authalic radius
-                    let r = 6371007.181;
+                    let r = self.radius;
                     out.push(ForwardCartesian {
                         coords: Coord {
                             x: p_x_face * r,
                             y: p_y_face * r,
                         },
-                        face: index + 1,
-                        triangle: sub_vertices_in_face 
+                        face: index,
                     });
 
                     // in case the point is on the edge of two faces, we return the first face.
@@ -170,18 +168,24 @@ impl Projection for Vgc {
         todo!()
     }
 
-    // @TODO - Needs to be reviewed
     // Calculate distortion and compare with Geocart values
-    fn compute_distortion(&self, lat: f64, lon: f64, polyhedron: &Polyhedron) -> DistortionMetrics {
+    fn compute_distortion(
+        &self,
+        lat: f64,
+        lon: f64,
+        polyhedron: &Polyhedron,
+        ellipsoid: &dyn Ellipsoid,
+    ) -> DistortionMetrics {
         let epsilon = 1e-5_f64; // degrees
+        let sphere = AuthalicSphere::from_ellipsoid(ellipsoid);
+        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lon, lat));
 
-        let center_xy =
-            &self.geo_to_cartesian(vec![Point::new(lon, lat)], Some(polyhedron), None)[0];
+        let center_xy = 
+            &self.geo_to_cartesian(vec![to_authalic(lon, lat)], Some(polyhedron), None)[0];
         let north_xy =
-            &self.geo_to_cartesian(vec![Point::new(lon, lat + epsilon)], Some(polyhedron), None)[0];
-        let east_xy =
-            &self.geo_to_cartesian(vec![Point::new(lon + epsilon, lat)], Some(polyhedron), None)[0];
-
+            &self.geo_to_cartesian(vec![to_authalic(lon, lat + epsilon)], Some(polyhedron), None)[0];
+        let east_xy = 
+            &self.geo_to_cartesian(vec![to_authalic(lon + epsilon, lat)], Some(polyhedron), None)[0];
         if center_xy.face != north_xy.face || center_xy.face != east_xy.face {
             return DistortionMetrics {
                 h: f64::NAN,
@@ -199,9 +203,9 @@ impl Projection for Vgc {
         let dx_dlambda = (east_xy.coords.x - center_xy.coords.x) / eps_rad;
         let dy_dlambda = (east_xy.coords.y - center_xy.coords.y) / eps_rad;
 
-        // WGS84 radii of curvature (meters/radian)
-        let a = 6378137.0_f64;
-        let e2 = 0.00669437999014_f64;
+        // Radii of curvature (meters/radian), derived from the given ellipsoid
+        let a = ellipsoid.major_axis();
+        let e2 = ellipsoid.eccentricity_squared();
         let lat_rad = lat.to_radians();
         let sin_lat = lat_rad.sin();
         let cos_lat = lat_rad.cos();
@@ -215,21 +219,27 @@ impl Projection for Vgc {
         let g = dx_dphi / m;
         let h_ = dy_dphi / m;
 
-        // Tissot: a and b are semi-axes of the indicatrix ellipse
+        // Tissot indicatrix semi-axes a, b (Snyder 1987, Map Projections: A Working
+        // Manual, eqs. 4-9-4-13). p, q are the scale magnitudes along the parallel
+        // and meridian; areal_scale = |e*h_ - f*g| = p*q*sin(psi) is the Jacobian,
+        // where psi is the angle between the projected parallel/meridian tangents.
+        //   S = p^2 + q^2, D = 2*areal_scale
+        //   a = (sqrt(S+D) + sqrt(S-D)) / 2
+        //   b = (sqrt(S+D) - sqrt(S-D)) / 2
+        // van Leeuwen & Strebe 2006 ("Slice and Dice", Eq. 29) gives the related
+        // max angular deformation sin(omega) = (a-b)/(a+b); they measure a, b
+        // numerically (small-circle sampling) rather than via this closed form -
+        // this analytic version is equivalent for an infinitesimal circle.
         let p = (e.powi(2) + f.powi(2)).sqrt();
         let q = (g.powi(2) + h_.powi(2)).sqrt();
-        let t = e * g + f * h_;
-
-        let a_tissot = ((p + q).powi(2)
-            - 2.0 * (e * h_ - f * g).abs() * (1.0 - (t / (p * q)).powi(2)).sqrt())
-        .sqrt()
-            / 2.0_f64.sqrt();
-        let b_tissot = ((p - q).powi(2)
-            + 2.0 * (e * h_ - f * g).abs() * (1.0 - (t / (p * q)).powi(2)).sqrt())
-        .sqrt()
-            / 2.0_f64.sqrt();
-
         let areal_scale = (e * h_ - f * g).abs();
+
+        let s = p.powi(2) + q.powi(2);
+        let d = 2.0 * areal_scale;
+        let sum_sq = s + d;
+        let diff_sq = (s - d).max(0.0);
+        let a_tissot = (sum_sq.sqrt() + diff_sq.sqrt()) / 2.0;
+        let b_tissot = (sum_sq.sqrt() - diff_sq.sqrt()) / 2.0;
         let omega = 2.0 * ((a_tissot - b_tissot) / (a_tissot + b_tissot)).asin();
 
         DistortionMetrics {
@@ -340,10 +350,21 @@ fn affine_transform_triangle(
 mod tests {
     use geo::Point;
 
-    use crate::projections::{
-        polyhedron::{icosahedron, Orientation},
-        projections::{traits::Projection, vgc::Vgc},
+    use crate::{
+        constants::WGS84,
+        ellipsoid::{AuthalicCoord, AuthalicSphere},
+        projections::{
+            polyhedron::{icosahedron, Orientation},
+            projections::{traits::Projection, vgc::Vgc},
+        },
     };
+
+    /// Test helper: converts a degrees geodetic `Point` to an `AuthalicCoord`
+    /// (radians, already on the WGS84 authalic sphere) the same way real
+    /// callers of `Vgc::geo_to_cartesian` are now required to.
+    fn to_authalic(p: Point) -> AuthalicCoord {
+        AuthalicSphere::from_ellipsoid(&WGS84).convert(p)
+    }
 
     #[test]
     fn test_point_creation() {
@@ -364,10 +385,13 @@ mod tests {
         let p7 = Point::new(152.44705, -21.59114);
         let p8 = Point::new(66.665798, -77.717034);
         let p9 = Point::new(63.501735, 80.099071);
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-        let result =
-            projection.geo_to_cartesian(vec![p1, p2, p3, p4, p5, p6, p7, p8, p9], Some(&icosahedron), None);
+        let points = vec![p1, p2, p3, p4, p5, p6, p7, p8, p9]
+            .into_iter()
+            .map(to_authalic)
+            .collect();
+        let result = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         assert_eq!(result[0].face, 8);
         assert_eq!(result[1].face, 5);
@@ -382,19 +406,15 @@ mod tests {
 
     #[test]
     fn test_spatial_consistency() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         // Test points
         let lisbon = Point::new(-9.49420, 38.68499);
         let porto = Point::new(-8.61099, 41.14961); // ~300km north of Lisbon
         let madrid = Point::new(-3.70379, 40.41678); // ~500km east of Lisbon
 
-        let results = projection.geo_to_cartesian(vec![lisbon, porto, madrid], Some(&icosahedron), None);
-
-        // Check they're on reasonable faces
-        println!("Lisbon face: {}", results[0].face);
-        println!("Porto face: {}", results[1].face);
-        println!("Madrid face: {}", results[2].face);
+        let points = vec![lisbon, porto, madrid].into_iter().map(to_authalic).collect();
+        let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         // Porto should be on same or adjacent face to Lisbon
         // (they're only 300km apart)
@@ -406,7 +426,7 @@ mod tests {
 
     #[test]
     fn test_pole_behavior() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         // Points around the pole should be on adjacent faces
@@ -416,16 +436,15 @@ mod tests {
             Point::new(144.0, 89.0),
             Point::new(216.0, 89.0),
             Point::new(288.0, 89.0),
-        ];
+        ]
+        .into_iter()
+        .map(to_authalic)
+        .collect();
 
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         // All should be near pole (check they're on the 5 faces around the north pole)
-        for (i, result) in results.iter().enumerate() {
-            println!(
-                "Point {} - Face: {}, Coords: {:?}",
-                i, result.face, result.coords
-            );
+        for result in results.iter() {
             let is_in_north_pole = match result.face {
                 0 | 2 | 4 | 6 | 8 => true,
                 _ => false,
@@ -436,34 +455,139 @@ mod tests {
 
     #[test]
     fn test_equator_distribution() {
-        let projection = Vgc;
+        let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         // Points evenly distributed around equator
-        let points: Vec<Point> = (0..10).map(|i| Point::new(i as f64 * 36.0, 0.0)).collect();
+        let points: Vec<AuthalicCoord> = (0..10)
+            .map(|i| to_authalic(Point::new(i as f64 * 36.0, 0.0)))
+            .collect();
 
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         // Should hit multiple different faces
         let unique_faces: std::collections::HashSet<_> = results.iter().map(|r| r.face).collect();
 
-        println!("Unique faces at equator: {:?}", unique_faces);
         assert!(unique_faces.len() >= 5, "Should span multiple faces");
     }
+    /// Demonstrates the projection is testable independent of any ellipsoid:
+    /// a unit-sphere `Vgc` fed `AuthalicCoord`s directly (no `AuthalicSphere`
+    /// conversion involved) still produces sane, small-magnitude output.
     #[test]
-    fn test_distortion() {
-        let projection = Vgc;
+    fn test_unit_sphere_projection() {
+        let projection = Vgc { radius: 1.0 };
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-        let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron);
-        println!("h: {} (expected: 0.7580403)", distortion.h);
-        println!("k: {} (expected: 1.333174)", distortion.k);
-        println!(
-            "Angular deformation: {}° (expected: 33.045°)",
-            distortion.angular_deformation
+
+        let points = vec![
+            AuthalicCoord { lon: -9.222154_f64.to_radians(), lat: 38.695125_f64.to_radians() },
+            AuthalicCoord { lon: 99.72721_f64.to_radians(), lat: 25.82577_f64.to_radians() },
+        ];
+
+        let result = projection.geo_to_cartesian(points, Some(&icosahedron), None);
+
+        assert_eq!(result.len(), 2);
+        for r in &result {
+            assert!(r.coords.x.abs() < 2.0);
+            assert!(r.coords.y.abs() < 2.0);
+        }
+    }
+
+    /// VGC is proven equal-area by construction (van Leeuwen & Strebe 2006):
+    /// the slice-and-dice method preserves area exactly, so `areal_scale`
+    /// (the Tissot indicatrix's Jacobian determinant, p*q*sin(theta')) must
+    /// equal 1.0 at every point on the sphere, independent of any external
+    /// tool. This replaces a prior Geocart-derived single-point comparison
+    /// that was never actually asserted and whose numbers no longer apply
+    /// (see PR description for why no Geocart-based test replaces it).
+    /// (Lisbon is kept as one of the sample points for continuity with the
+    /// old test.)
+    #[test]
+    fn test_distortion_areal_scale_is_unity() {
+        let projection = Vgc::default();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+
+        let points = [
+            (38.68499, -9.49420),   // Lisbon
+            (-33.8688, 151.2093),   // Sydney
+            (64.1466, -21.9426),    // Reykjavik
+            (1.3521, 103.8198),     // Singapore, near-equator
+            (-89.0, 0.0),           // near south pole
+        ];
+
+        // compute_distortion uses a fixed 1e-5° finite-difference step. Near
+        // sub-triangle interpolation seams (not just polyhedron edges/cusps)
+        // the piecewise-affine map's local curvature is higher, which widens
+        // discretization error in areal_scale beyond the ~1e-3 noise floor
+        // seen at points away from seams (e.g. Lisbon: 0.9986). Tolerance is
+        // set above that observed noise, not loosened to hide a real bug —
+        // it's still an order of magnitude tighter than the ~30% mismatch
+        // the old (buggy) formula would have produced.
+        let tol = 0.02;
+        for (lat, lon) in points {
+            let distortion = projection.compute_distortion(lat, lon, &icosahedron, &WGS84);
+            if !distortion.areal_scale.is_finite() {
+                continue; // epsilon probe crossed a face boundary; skip
+            }
+            assert!(
+                (distortion.areal_scale - 1.0).abs() < tol,
+                "areal_scale = {} at ({}, {}), expected ~1.0 (equal-area)",
+                distortion.areal_scale,
+                lat,
+                lon
+            );
+        }
+    }
+
+    /// Cross-checks `compute_distortion`'s statistical behavior against
+    /// Table 1 of van Leeuwen & Strebe (2006): for the icosahedron under the
+    /// vertex-oriented great-circle projection, the 2ω angle-distortion
+    /// samples have mean μ = 0.141 rad and standard deviation σ = 0.028 rad.
+    /// The paper measures a, b numerically (small-circle sampling); this
+    /// samples points on a Fibonacci sphere and uses the closed-form
+    /// Tissot-indicatrix derivation instead, so the tolerances below are
+    /// generous rather than exact.
+    #[test]
+    fn test_distortion_matches_van_leeuwen_table1_icosahedron() {
+        let projection = Vgc::default();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+
+        let n = 2000;
+        let golden_angle = std::f64::consts::PI * (3.0 - 5.0_f64.sqrt());
+        let mut samples: Vec<f64> = Vec::with_capacity(n);
+
+        for i in 0..n {
+            // Fibonacci sphere: near-uniform point distribution over the globe.
+            let y = 1.0 - 2.0 * (i as f64 + 0.5) / n as f64;
+            let lat = y.asin().to_degrees();
+            let lon = (golden_angle * i as f64).to_degrees() % 360.0;
+
+            let distortion = projection.compute_distortion(lat, lon, &icosahedron, &WGS84);
+            if distortion.angular_deformation.is_finite() {
+                samples.push(distortion.angular_deformation.to_radians());
+            }
+        }
+
+        assert!(
+            samples.len() > n / 2,
+            "too many samples dropped (face-crossing epsilon probes): {} of {}",
+            samples.len(),
+            n
         );
-        println!(
-            "Areal scale: {} (expected: ~1.0 for equal-area)",
-            distortion.areal_scale
+
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let variance =
+            samples.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / samples.len() as f64;
+        let std_dev = variance.sqrt();
+
+        assert!(
+            (mean - 0.141).abs() < 0.05,
+            "mean 2ω = {:.4} rad, expected ~0.141 rad (Table 1, icosahedron/VGC)",
+            mean
+        );
+        assert!(
+            (std_dev - 0.028).abs() < 0.03,
+            "std 2ω = {:.4} rad, expected ~0.028 rad (Table 1, icosahedron/VGC)",
+            std_dev
         );
     }
 }

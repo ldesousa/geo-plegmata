@@ -10,7 +10,7 @@
 use crate::types::{
     DggrsImplementation, DggrsName, DggrsSpec, DggrsUid, RefinementLevel, RelativeDepth,
 };
-pub const DGGRS_SPECS: [DggrsSpec; 11] = [
+pub const DGGRS_SPECS: [DggrsSpec; 12] = [
     DggrsSpec {
         id: DggrsUid::ISEA3HDGGRID,
         name: DggrsName::ISEA3H,
@@ -51,7 +51,7 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         crs: "",
         aperture: 7,
         min_refinement_level: RefinementLevel::new_const(0),
-        max_refinement_level: RefinementLevel::new_const(16),
+        max_refinement_level: RefinementLevel::new_const(15),
         default_refinement_level: RefinementLevel::new_const(2),
         max_relative_depth: RelativeDepth::new_const(6),
         default_relative_depth: RelativeDepth::new_const(4),
@@ -175,5 +175,24 @@ pub const DGGRS_SPECS: [DggrsSpec; 11] = [
         default_refinement_level: RefinementLevel::new_const(2),
         max_relative_depth: RelativeDepth::new_const(8),
         default_relative_depth: RelativeDepth::new_const(6),
+    },
+    DggrsSpec {
+        id: DggrsUid::HEX9,
+        name: DggrsName::HEX9,
+        tool: DggrsImplementation::HEX9,
+        title: "Hex9 (H9)",
+        description: "Aperture-9 hexagonal DGGS (libhex9) with self-contained UUID addresses",
+        uri: "https://github.com/MrBenGriffin/libhex9",
+        crs: "",
+        aperture: 9,
+        // Cells/grid run at layers 0..=30 (12 well-defined L0 base hexagons,
+        // through the reclaimed L30 layout); the adapter clamps to the linked
+        // libhex9's hex9_lmax() at runtime.
+        min_refinement_level: RefinementLevel::new_const(0),
+        max_refinement_level: RefinementLevel::new_const(30),
+        default_refinement_level: RefinementLevel::new_const(5),
+        // 9^d grows fast (9^5 = 59049 sub-zones); kept modest by default.
+        max_relative_depth: RelativeDepth::new_const(5),
+        default_relative_depth: RelativeDepth::new_const(2),
     },
 ];

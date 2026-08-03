@@ -4,6 +4,7 @@ authors = ["João Manuel <joao.manuel@geoinsight.ai>"]
 edition = "2024"
 name = "gp-bindings-js"
 version = "0.0.0"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
@@ -12,8 +13,12 @@ crate-type = ["cdylib"]
 geo = "0.30.0"
 napi = "3.0.0"
 napi-derive = "3.0.0"
-# api = { path = "../../api" }   # depends on your core crate
-geoplegma = {git = "https://github.com/GeoPlegma/GeoPlegma.git", package = "geoplegma"}
+# Path, not git: as a workspace member this must build THIS tree's geoplegma
+# (gp-encoding already does the same). A git dependency on master resolves a
+# second copy of geoplegma — and two hex9-sys versions cannot coexist
+# (`links = "hex9"`), so any local change to that pin broke the whole
+# workspace resolve.
+geoplegma = { path = "../../geoplegma" }
 getrandom = { version = "0.2", features = ["js"] }
 
 [build-dependencies]

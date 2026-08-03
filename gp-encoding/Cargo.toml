@@ -1,6 +1,7 @@
 [package]
 name = "gp-encoding"
-version = "0.1.0"
+version.workspace = true
+publish = false # depends on geoplegma, which is blocked on crates.io (see geoplegma/Cargo.toml)
 license = "MIT OR Apache-2.0"
 edition = "2024"
 readme = "../README.md"
@@ -8,7 +9,7 @@ rust-version = "1.88"
 
 [dependencies]
 geoplegma = { path = "../geoplegma", features = ["serde"] }
-gdal = "0.19"
+gdal = { version = "0.19", features = ["bindgen"] }
 geo = "0.30"
 rayon = "1.11"
 geo-types = "0.7"
@@ -23,3 +24,12 @@ zarrs_filesystem = "0.3"
 [[bin]]
 name = "gp-encoding"
 path = "src/main.rs"
+
+[[bench]]
+name = "convert"
+harness = false
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8.5"
+
