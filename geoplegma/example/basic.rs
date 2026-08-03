@@ -7,9 +7,8 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 use geoplegma::error;
-use geoplegma::types::{DggrsUid, RefinementLevel, RelativeDepth};
+use geoplegma::types::{BoundingBox, DggrsUid, Point, RefinementLevel, RelativeDepth};
 use geoplegma::{get, registry};
-use geoplegma::api::{BoundingBox, Point};
 use std::time::Instant;
 
 /// This is just an example and basic testing function if there is output or not
