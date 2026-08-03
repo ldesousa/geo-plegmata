@@ -57,7 +57,7 @@ pub fn main() -> () {
             p.coords.y
         );
     }
-    let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron);
+    let distortion = projection.compute_distortion(38.68499, -9.49420, &icosahedron, &WGS84);
     println!("h: {} (expected: 0.7580403)", distortion.h);
     println!("k: {} (expected: 1.333174)", distortion.k);
     println!(

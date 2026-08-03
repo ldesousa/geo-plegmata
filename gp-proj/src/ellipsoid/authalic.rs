@@ -30,7 +30,7 @@ pub struct AuthalicSphere {
 }
 
 impl AuthalicSphere {
-    pub fn from_ellipsoid(ellipsoid: &impl Ellipsoid) -> Self {
+    pub fn from_ellipsoid(ellipsoid: &(impl Ellipsoid + ?Sized)) -> Self {
         let coefficients = fourier_coefficients(
             KarneyCoefficients::GEODETIC_TO_AUTHALIC,
             ellipsoid.third_flattening(),

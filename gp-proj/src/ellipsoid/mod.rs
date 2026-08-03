@@ -20,4 +20,10 @@ pub trait Ellipsoid {
 
     /// Radius of the sphere with the same surface area as this ellipsoid.
     fn authalic_radius(&self) -> f64;
+
+    /// Semi-major axis `a` (equatorial radius), in meters.
+    fn major_axis(&self) -> f64;
+
+    /// Eccentricity squared `e² = (a² - b²) / a²`.
+    fn eccentricity_squared(&self) -> f64;
 }

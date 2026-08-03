@@ -1,11 +1,11 @@
 [workspace]
-members = ["geoplegma", "gp-bindings/js", "gp-encoding", "gp-proj", "viewer-3d/src-tauri"]
+members = ["geoplegma", "gp-bindings/js", "gp-bindings/python", "gp-encoding", "gp-proj"]
+
 exclude = ["tests", "diagrams", "docs"]
 resolver = "3"
 
 [workspace.package]
-version = "0.2.1"
+version = "0.1.0"
 authors = ["GeoPlegma Developers", "GeoInsight"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
-readme = "README.md"
