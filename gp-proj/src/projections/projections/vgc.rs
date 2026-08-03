@@ -7,7 +7,7 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::f64::consts::{E, PI};
+use std::f64::consts::PI;
 
 use crate::{
     constants::WGS84,
@@ -155,7 +155,7 @@ impl Projection for Vgc {
                             x: p_x_face * r,
                             y: p_y_face * r,
                         },
-                        face: index + 1,
+                        face: index,
                         sub_triangle_id,
                     });
 
@@ -178,8 +178,7 @@ impl Projection for Vgc {
         let r = self.radius;
 
         for position in positions {
-            // ForwardCartesian.face is 1-indexed (see geo_to_cartesian), polyhedron APIs are 0-indexed
-            let face = usize::from(position.face) - 1;
+            let face = usize::from(position.face);
             let sub_triangle_id = position.sub_triangle_id;
 
             // STEP 1: divide out radius
@@ -221,12 +220,23 @@ impl Projection for Vgc {
             let rhs_x = a.0 - b.0;
             let rhs_y = a.1 - b.1;
             let det = bp_x * (-ac_y) - bp_y * (-ac_x);
-            // t is the parameter such that D = B + t*(P-B); since P = B + xy*(D-B), t = 1/xy
-            let t = (rhs_x * (-ac_y) - rhs_y * (-ac_x)) / det;
-            let s = (bp_x * rhs_y - bp_y * rhs_x) / det;
 
-            let xy = 1.0 / t;
-            let uv = 1.0 - s;
+            // P == B (bp = (0,0)) is the one singular case: the system above has no
+            // unique (t,s), det == 0, and s = 0/0 would be NaN. xy is unambiguous
+            // there though (P = B for any D, i.e. xy = 0), so short-circuit it
+            // instead of dividing by a zero det.
+            let (xy, uv) = if det == 0.0 {
+                (0.0, 0.0)
+            } else {
+                // t is the parameter such that D = B + t*(P-B); since P = B + xy*(D-B), t = 1/xy
+                let t = (rhs_x * (-ac_y) - rhs_y * (-ac_x)) / det;
+                let s = (bp_x * rhs_y - bp_y * rhs_x) / det;
+                // t -> 0 only as det -> ±inf, which shouldn't happen for an in-triangle
+                // point, but guard 1.0/t anyway so a corrupted/out-of-range det can't
+                // hand an infinite xy to the Newton solver below.
+                let xy = if t == 0.0 { 0.0 } else { 1.0 / t };
+                (xy, 1.0 - s)
+            };
 
             // STEP 5: get sub-triangle 3D vertices, then invert slice_and_dice to recover
             // the true angular distances ap (A→P) and bp (B→P)
@@ -234,7 +244,18 @@ impl Projection for Vgc {
             let ArcLengths {
                 ab, bc, ac: ac_len, ..
             } = polyhedron.arc_lengths(sub_triangle_3d, Vector3D::zero());
-            let [ap, bp] = inverse_slice_and_dice(sub_triangle_3d, ac_len, ab, bc, xy, uv);
+            let [ap, bp] = match inverse_slice_and_dice(sub_triangle_3d, ac_len, ab, bc, xy, uv) {
+                Ok(result) => result,
+                Err(err) => {
+                    // Newton's method didn't converge; fall back to its last iterate
+                    // (usually still close) rather than failing the whole batch, but
+                    // surface it so a bad projection is diagnosable instead of silent.
+                    eprintln!(
+                        "vgc inverse: face {face} sub_triangle {sub_triangle_id} did not converge ({err:?})"
+                    );
+                    err.best_effort()
+                }
+            };
 
             // STEP 6: reconstruct 3D point via spherical trilateration from A, B and ap, bp
             let point_p = reconstruct_point(sub_triangle_3d, ap, bp);
@@ -329,6 +350,21 @@ impl Projection for Vgc {
 }
 
 fn slice_and_dice(ac: f64, ab: f64, bc: f64, ap: f64, bp: f64) -> [f64; 2] {
+    // P at/near corner B (bp ~ 0): ρ's ratio below is nominally 0/0 there (both
+    // ab.sin()*bp.sin() and ap.cos()-ab.cos()*bp.cos() vanish as bp -> 0 with
+    // ap -> ab), and it's not just the exact bp == 0.0 case that's a problem.
+    // cos(ap) and cos(ab) are each only accurate to ~1e-16 in absolute terms,
+    // so once bp drops anywhere near that floor, cos(ap) - cos(ab)*cos(bp) is
+    // pure rounding noise rather than the true (tiny) signal — the ratio can
+    // land anywhere in [-1, 1] instead of near 1, silently handing acos() a
+    // garbage angle (not a NaN, so nothing downstream catches it) rather than
+    // ~0. xy is unambiguous in this regime regardless (P = B, so xy = 0); uv
+    // is irrelevant since it's scaled by xy ~ 0.
+    const BP_ZERO_TOL: f64 = 1e-9;
+    if bp < BP_ZERO_TOL {
+        return [0.0, 0.0];
+    }
+
     // Spherical angles for point B and point C
     let beta = ((ac.cos() - ab.cos() * bc.cos()) / (ab.sin() * bc.sin()))
         .clamp(-1.0, 1.0)
@@ -350,13 +386,29 @@ fn slice_and_dice(ac: f64, ab: f64, bc: f64, ap: f64, bp: f64) -> [f64; 2] {
 
     // 3. Calculate cos(x + y) by applying the spherical law of cosines
     // being that the x and y are the spherical lenghts from B to P and P to D, respectively.
-    let cos_xp_y;
-    if rho <= E.powi(-9) {
-        // E = 2.71828...
-        cos_xp_y = ab.cos();
-    } else {
-        cos_xp_y = 1.0 / (rho.tan() * delta.tan())
-    }
+    //
+    // This used to be `1.0 / (rho.tan() * delta.tan())`, guarded by a separate branch
+    // for small rho (which sends delta -> pi/2, so that formula is a 0*inf
+    // indeterminate form there and was replaced by its rho -> 0 limit, ab.cos()).
+    // That limit is only the zeroth-order term though: for any tiny-but-nonzero rho on
+    // the tan-formula side of the threshold, the true value differs from ab.cos() by an
+    // amount that doesn't vanish fast enough — so the switch between the frozen constant
+    // and the tan formula is a genuine (if small) discontinuity in cos_xp_y at rho ==
+    // E.powi(-9). A finite-difference Jacobian sampling straddles that step whenever a
+    // Newton iterate's rho sits within about h * d(rho)/d(ap,bp) of the threshold,
+    // corrupting the derivative estimate and stalling convergence (observed as
+    // MaxIterationsExceeded with the residual barely shrinking iteration to iteration).
+    //
+    // Substituting delta = acos(sin(rho)*cos(ab)) into tan(rho)*tan(delta) and
+    // simplifying algebraically removes the 0*inf form entirely, giving a single
+    // closed-form expression that's smooth for every rho (no branch, no threshold):
+    //   tan(rho)*tan(delta) = sqrt(1 - sin(rho)^2*cos(ab)^2) / (cos(rho)*cos(ab))
+    // so cos_xp_y = cos(rho)*cos(ab) / sqrt(1 - sin(rho)^2*cos(ab)^2). At rho == 0 this
+    // reduces to exactly cos(ab), matching the old limit, but it also tracks the correct
+    // higher-order value for small nonzero rho instead of freezing at the zeroth-order term.
+    let cos_ab = ab.cos();
+    let cos_xp_y =
+        rho.cos() * cos_ab / (1.0 - rho.sin().powi(2) * cos_ab.powi(2)).max(0.0).sqrt();
 
     // 4. Calculate the ratio of the spherical areas x and y
     let xy = f64::sqrt((1.0 - bp.cos()) / (1.0 - cos_xp_y));
@@ -451,6 +503,41 @@ pub fn triangle_by_id(polyhedron: &Polyhedron, face: usize, sub_triangle_id: u8)
     }
 }
 
+/// Why [`inverse_slice_and_dice`]'s Newton search stopped without reaching `eps`.
+/// Both variants carry the last `[ap, bp]` iterate as a best-effort estimate,
+/// since it's usually still a reasonable (if imprecise) answer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InverseError {
+    /// The finite-difference Jacobian was singular (det ~ 0): no Newton step
+    /// could be taken from this iterate.
+    SingularJacobian { ap: f64, bp: f64 },
+    /// Ran the full iteration budget without both residuals dropping below `eps`.
+    MaxIterationsExceeded { ap: f64, bp: f64 },
+    /// The residuals dropped below `eps`, but only because the Newton step that
+    /// got here was clamped to the `[0, ab] x [0, bc]` box rather than landing
+    /// there on its own — the raw, unclamped step asked to go further. The
+    /// `.clamp()` on a divergent step would otherwise mask this silently: the
+    /// residual check alone can't tell a clean interior solve from one that
+    /// coincidentally reads as converged while pinned to a truncated boundary.
+    ConvergedAtClampedBoundary { ap: f64, bp: f64 },
+    /// Even the smallest backtracked step (see the line search in the main
+    /// loop) failed to reduce the residual: the search is stuck and further
+    /// iterations would just repeat the same non-improving move.
+    NoImprovingStep { ap: f64, bp: f64 },
+}
+
+impl InverseError {
+    /// The last `[ap, bp]` iterate, regardless of which variant this is.
+    pub fn best_effort(&self) -> [f64; 2] {
+        match *self {
+            InverseError::SingularJacobian { ap, bp } => [ap, bp],
+            InverseError::MaxIterationsExceeded { ap, bp } => [ap, bp],
+            InverseError::ConvergedAtClampedBoundary { ap, bp } => [ap, bp],
+            InverseError::NoImprovingStep { ap, bp } => [ap, bp],
+        }
+    }
+}
+
 pub fn inverse_slice_and_dice(
     sub_triangle: [Vector3D; 3], // [mid=A, corner=B, center=C]
     ac: f64,
@@ -458,7 +545,7 @@ pub fn inverse_slice_and_dice(
     bc: f64,
     xy_target: f64,
     uv_target: f64,
-) -> [f64; 2] {
+) -> Result<[f64; 2], InverseError> {
     // Numerical inversion via Newton's method
     // We search for (ap, bp) such that slice_and_dice(ac,ab,bc,ap,bp) = [xy_target, uv_target]
 
@@ -474,8 +561,18 @@ pub fn inverse_slice_and_dice(
 
     let eps = 1e-10_f64;
     let h = 1e-7_f64; // finite difference step
+    // Whether the (ap, bp) currently being tested was reached by clamping the
+    // previous iteration's raw step back into range (see ConvergedAtClampedBoundary).
+    let mut last_step_clamped = false;
 
-    for _ in 0..50 {
+    // 100, not 50: with the central-difference Jacobian below, most points still
+    // converge in a handful of iterations, but a one-sided-difference Jacobian used to
+    // leave some interior points (nowhere near any corner/edge) converging only
+    // linearly instead of Newton's usual quadratic rate, and 50 iterations wasn't
+    // always enough to walk that down to `eps` even though the position error was
+    // already small. The central difference fixes the rate; this gives the now-good
+    // Jacobian enough room to actually land on `eps` for those points too.
+    for _ in 0..100 {
         let [xy, uv] = slice_and_dice(ac, ab, bc, ap, bp);
 
         let r_xy = xy - xy_target;
@@ -483,17 +580,32 @@ pub fn inverse_slice_and_dice(
 
         // converged?
         if r_xy.abs() < eps && r_uv.abs() < eps {
-            break;
+            if last_step_clamped {
+                return Err(InverseError::ConvergedAtClampedBoundary { ap, bp });
+            }
+            return Ok([ap, bp]);
         }
 
-        // Jacobian via finite differences
-        let [xy_ap, uv_ap] = slice_and_dice(ac, ab, bc, ap + h, bp);
-        let [xy_bp, uv_bp] = slice_and_dice(ac, ab, bc, ap, bp + h);
+        // Jacobian via central finite differences. A one-sided difference here
+        // ((f(x+h)-f(x))/h) has O(h) truncation error but O(eps_machine/h) rounding
+        // error, so its total error is minimized around h ~ sqrt(eps_machine) — fine
+        // as long as the true derivative is O(1). But at some interior (ap, bp) the
+        // true d(uv)/d(ap,bp) is small (a near-degenerate, if not singular, direction),
+        // and the one-sided rounding-error floor (~2e-9 absolute, here) swamps that
+        // small true signal, corrupting the step direction: Newton then degrades from
+        // quadratic to linear convergence and 50-100 iterations stops being enough.
+        // Central differences cancel the O(h) term, so their error is O(h^2) truncation
+        // + O(eps_machine/h) rounding — a strictly better trade at the same h, and it's
+        // what actually fixed the slow-converging points found by stress-testing this.
+        let [xy_ap_plus, uv_ap_plus] = slice_and_dice(ac, ab, bc, ap + h, bp);
+        let [xy_ap_minus, uv_ap_minus] = slice_and_dice(ac, ab, bc, (ap - h).max(0.0), bp);
+        let [xy_bp_plus, uv_bp_plus] = slice_and_dice(ac, ab, bc, ap, bp + h);
+        let [xy_bp_minus, uv_bp_minus] = slice_and_dice(ac, ab, bc, ap, (bp - h).max(0.0));
 
-        let d_xy_ap = (xy_ap - xy) / h;
-        let d_uv_ap = (uv_ap - uv) / h;
-        let d_xy_bp = (xy_bp - xy) / h;
-        let d_uv_bp = (uv_bp - uv) / h;
+        let d_xy_ap = (xy_ap_plus - xy_ap_minus) / (2.0 * h);
+        let d_uv_ap = (uv_ap_plus - uv_ap_minus) / (2.0 * h);
+        let d_xy_bp = (xy_bp_plus - xy_bp_minus) / (2.0 * h);
+        let d_uv_bp = (uv_bp_plus - uv_bp_minus) / (2.0 * h);
 
         // 2x2 Jacobian:
         // | d_xy_ap  d_xy_bp | | delta_ap |   | r_xy |
@@ -501,17 +613,62 @@ pub fn inverse_slice_and_dice(
 
         let det = d_xy_ap * d_uv_bp - d_xy_bp * d_uv_ap;
         if det.abs() < 1e-14 {
-            break; // singular, can't continue
+            return Err(InverseError::SingularJacobian { ap, bp });
         }
 
         let delta_ap = (r_xy * d_uv_bp - r_uv * d_xy_bp) / det;
         let delta_bp = (d_xy_ap * r_uv - d_uv_ap * r_xy) / det;
 
-        ap = (ap - delta_ap).clamp(0.0, ab);
-        bp = (bp - delta_bp).clamp(0.0, bc);
+        // Backtracking line search: taking the full Newton step unconditionally can
+        // overshoot past slice_and_dice's internal `uv`/rho clamps. Once a trial point
+        // lands in a clamped region, that region is locally flat (its finite-difference
+        // derivative is ~0), so the *next* Jacobian is unreliable there and the search
+        // can oscillate in and out of the clamp forever without ever landing both
+        // residuals under `eps` at once. Halving the step until it actually reduces the
+        // residual keeps each accepted move on gradient-bearing ground.
+        let current_residual_sq = r_xy * r_xy + r_uv * r_uv;
+        // A legitimate solution can sit exactly on ap==0/ab or bp==0/bc (the sub-triangle's
+        // own edges/corners), so a step landing a hair outside the box from ordinary
+        // float rounding is normal, not suspicious. Only flag an overshoot big enough
+        // that it can't be explained by that (i.e. actually asked to leave the box,
+        // not just round-trip past its edge).
+        const BOUNDARY_TOL: f64 = 1e-8;
+
+        let mut step_scale = 1.0_f64;
+        let mut accepted = None;
+        for _ in 0..10 {
+            let ap_next = ap - step_scale * delta_ap;
+            let bp_next = bp - step_scale * delta_bp;
+            let ap_clamped = ap_next.clamp(0.0, ab);
+            let bp_clamped = bp_next.clamp(0.0, bc);
+            let [xy_try, uv_try] = slice_and_dice(ac, ab, bc, ap_clamped, bp_clamped);
+            let r_xy_try = xy_try - xy_target;
+            let r_uv_try = uv_try - uv_target;
+            let try_residual_sq = r_xy_try * r_xy_try + r_uv_try * r_uv_try;
+            if try_residual_sq < current_residual_sq {
+                let ap_overshoot = (-ap_next).max(ap_next - ab).max(0.0);
+                let bp_overshoot = (-bp_next).max(bp_next - bc).max(0.0);
+                accepted = Some((
+                    ap_clamped,
+                    bp_clamped,
+                    ap_overshoot > BOUNDARY_TOL || bp_overshoot > BOUNDARY_TOL,
+                ));
+                break;
+            }
+            step_scale *= 0.5;
+        }
+
+        match accepted {
+            Some((ap_next, bp_next, clamped)) => {
+                ap = ap_next;
+                bp = bp_next;
+                last_step_clamped = clamped;
+            }
+            None => return Err(InverseError::NoImprovingStep { ap, bp }),
+        }
     }
 
-    [ap, bp]
+    Err(InverseError::MaxIterationsExceeded { ap, bp })
 }
 
 /// Reconstruct a 3D unit vector on the sphere given a sub-triangle [mid=A, corner=B, center=C]
