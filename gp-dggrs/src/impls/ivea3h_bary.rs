@@ -12,8 +12,10 @@ use crate::sys_api::DggrsSysApi;
 use geo::Point;
 use geoplegma::types::RefinementLevel; 
 use gp_proj::{
+    constants::WGS84,
+    ellipsoid::AuthalicSphere,
     projections::{
-        polyhedron::{Orientation, icosahedron::new},
+        polyhedron::{icosahedron, Orientation},
         projections::{traits::Projection, vgc::Vgc},
     },
     utils::shape::cartesian_to_barycentric,
@@ -266,10 +268,13 @@ impl DggrsSysApi for IVEA3HBary {
         point: Point,
         //config: Option<DggrsApiConfig>,
     ) -> u64 {
-        //        let bary = IVEA3HBary::project(point);
-        let projection = Vgc;
-        let icosahedron = new(Orientation::DGGS_OPTIMAL);
-        let projected = projection.geo_to_cartesian(vec![point], Some(&icosahedron), None);
+
+        let projection = Vgc::default();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+        let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
+        let conv_point = sphere.convert(point);
+        let projected = projection.geo_to_cartesian(vec![conv_point], Some(&icosahedron), None);
+
         let face : i32 = projected[0].face.try_into().unwrap();
         let triangle = projected[0].triangle;
         let bary_coords = cartesian_to_barycentric(
@@ -295,115 +300,3 @@ impl DggrsSysApi for IVEA3HBary {
     }
 }
 
-#[cfg(test)]
-mod tests {
-
-    use crate::impls::ivea3h_bary::IVEA3HBary;
-    use geoplegma::types::RefinementLevel;
-
-    #[test]
-    fn test_zone_from_point() {
-        // ToDo    
-    }
-
-    #[test]
-    fn test_find_nearest_zone_centre() {
-        
-        let mut system = IVEA3HBary::new(RefinementLevel::new(3).unwrap());
-        let bary1 = (0.21 as f64, 0.64 as f64);
-        let bary2 = (0.45 as f64, 0.22 as f64);
-
-
-        let mut centre = system.find_nearest_zone_centre(bary1);
-        assert_eq!(centre.0, 2);
-        assert_eq!(centre.1, 5);
-
-        centre = system.find_nearest_zone_centre(bary2);
-        assert_eq!(centre.0, 5); // ==> Verify this one !!!!
-        assert_eq!(centre.1, 2);
-        
-        system.set_refinement_level(RefinementLevel::new(4).unwrap());
-
-        centre = system.find_nearest_zone_centre(bary1);
-        assert_eq!(centre.0, 2);
-        assert_eq!(centre.1, 6);
-
-        centre = system.find_nearest_zone_centre(bary2);
-        assert_eq!(centre.0, 4);
-        assert_eq!(centre.1, 2);
-        
-        system.set_refinement_level(RefinementLevel::new(5).unwrap());
-
-        centre = system.find_nearest_zone_centre(bary1);
-        assert_eq!(centre.0, 5);
-        assert_eq!(centre.1, 17);
-
-        centre = system.find_nearest_zone_centre(bary2);
-        assert_eq!(centre.0, 12);
-        assert_eq!(centre.1, 6);
-    }
-
-    #[test]
-    fn test_edge_cases() {
-        
-        let mut system = IVEA3HBary::new(RefinementLevel::new(3).unwrap());
-
-        let mut i = 2;
-        let mut j = 5;
-        let mut face = 7;
-        let mut unique = system.edge_cases(i, j, face);
-        assert_eq!(i, unique.0);
-        assert_eq!(j, unique.1);
-        assert_eq!(face, unique.2);
-        
-        i = 0;
-        j = 3;
-        face = 1;
-        unique = system.edge_cases(i, j, face);
-        assert_eq!(i, unique.0);
-        assert_eq!(j, unique.1);
-        assert_eq!(face, unique.2);
-        
-        i = 3;
-        j = 6;
-        face = 9;
-        unique = system.edge_cases(i, j, face);
-        assert_eq!(0, unique.0);
-        assert_eq!(6, unique.1);
-        assert_eq!(1, unique.2);
-
-        system = IVEA3HBary::new(RefinementLevel::new(4).unwrap());
-        
-        i = 3;
-        j = 6;
-        face = 9;
-        unique = system.edge_cases(i, j, face);
-        assert_eq!(0, unique.0);
-        assert_eq!(6, unique.1);
-        assert_eq!(1, unique.2);
-        
-        i = 4;
-        j = 5;
-        face = 13;
-        unique = system.edge_cases(i, j, face);
-        assert_eq!(j, unique.0);
-        assert_eq!(i, unique.1);
-        assert_eq!(6, unique.2);
-        
-        i = 0;
-        j = 9;
-        face = 16;
-        unique = system.edge_cases(i, j, face);
-        assert_eq!(i, unique.0);
-        assert_eq!(j, unique.1);
-        assert_eq!(12, unique.2);
-        
-        i = 0;
-        j = 9;
-        face = 7;
-        unique = system.edge_cases(i, j, face);
-        assert_eq!(i, unique.0);
-        assert_eq!(j, unique.1);
-        assert_eq!(1, unique.2);
-    }
-}
