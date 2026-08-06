@@ -8,10 +8,20 @@
 // except according to those terms
 
 use crate::{
-    Vector3D, ellipsoid::{AuthalicCoord, Ellipsoid}, projections::{layout::traits::Layout, polyhedron::Polyhedron}
+    Vector3D,
+    ellipsoid::{AuthalicCoord, Ellipsoid},
+    projections::{
+        layout::traits::Layout,
+        polyhedron::{Orientation, Polyhedron},
+    },
 };
 use geo::{Coord, Point};
 
+/// Barycentric coordinates of a point within a polyhedron face.
+///
+/// `coords.x`, `coords.y`, `coords.z` are the weights of the face's own 3 vertices (0, 1, 2
+/// in whatever order the projection defines them), so `coords.x + coords.y + coords.z ==
+/// 1.0` and the point is inside the face iff all three are in `[0, 1]`.
 #[derive(Debug)]
 pub struct ForwardBary {
     pub coords: Vector3D,
@@ -39,6 +49,7 @@ pub trait Projection {
         polyhedron: Option<&Polyhedron>,
         layout: Option<&dyn Layout>,
     ) -> Vec<ForwardCartesian>;
+
     fn cartesian_to_geo(&self, coords: Vec<Coord>) -> Point;
 
     fn compute_distortion(
@@ -57,4 +68,19 @@ pub trait Projection {
         [x, y, z]
     }
 
+    /// Geographic coordinates straight to barycentric face coordinates, in one call.
+    ///
+    /// Named to mirror [`geo_to_cartesian`](Self::geo_to_cartesian): both go from a "geo"
+    /// input to a projected output. Defaults to the WGS84 ellipsoid and, when no
+    /// `polyhedron` is supplied, an icosahedron at [`Orientation::DGGS_OPTIMAL`]. Pass a
+    /// pre-built `polyhedron` to use a different orientation/shape or to reuse one across
+    /// many calls instead of rebuilding it each time. See [`ForwardBary`] for what `coords`
+    /// means.
+    fn geo_to_barycentric(
+        &self,
+        points: Vec<Point>,
+        polyhedron: Option<&Polyhedron>,
+        orientation: Option<Orientation>,
+        ellipsoid: Option<&dyn Ellipsoid>,
+    ) -> Vec<ForwardBary>;
 }
