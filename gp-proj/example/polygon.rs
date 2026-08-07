@@ -7,7 +7,7 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use geo::Point;
+use geoplegma::types::Point;
 use gp_proj::{
     constants::WGS84,
     ellipsoid::AuthalicSphere,

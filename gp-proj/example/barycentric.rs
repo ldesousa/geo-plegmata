@@ -5,7 +5,7 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use geo::Point;
+use geoplegma::types::Point;
 use gp_proj::projections::projections::{traits::Projection, vgc::Vgc};
 
 pub fn main() -> () {

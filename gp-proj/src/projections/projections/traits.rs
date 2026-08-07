@@ -15,7 +15,8 @@ use crate::{
         polyhedron::{Orientation, Polyhedron},
     },
 };
-use geo::{Coord, Point};
+use geo::Coord;
+use geoplegma::types::Point;
 
 /// Barycentric coordinates of a point within a polyhedron face.
 ///

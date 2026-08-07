@@ -7,7 +7,7 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use geo::Point;
+use geoplegma::types::Point;
 use gp_proj::{
     constants::WGS84,
     ellipsoid::AuthalicSphere,
@@ -50,8 +50,8 @@ pub fn main() -> () {
     for (i, p) in coords.iter().enumerate() {
         println!(
             "({:>10.4}, {:>10.4}) -> face={} x={:.4} y={:.4}",
-            points[i].x(),
-            points[i].y(),
+            points[i].lon,
+            points[i].lat,
             p.face,
             p.coords.x,
             p.coords.y
