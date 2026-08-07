@@ -19,3 +19,7 @@ path = "example/basic.rs"
 name = "polygon"
 path = "example/polygon.rs"
 
+[[example]]
+name = "barycentric"
+path = "example/barycentric.rs"
+
