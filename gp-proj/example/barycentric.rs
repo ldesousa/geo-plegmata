@@ -15,10 +15,10 @@ pub fn main() -> () {
     );
 
     let points: Vec<Point> = vec![
-        Point::new(-9.222154, 38.695125),
-        Point::new(-138.97503, 47.7022),
-        Point::new(99.72721, 25.82577),
-        Point::new(-64.10552, 12.89276),
+        Point::new(38.695125, -9.222154),
+        Point::new(47.7022, -138.97503),
+        Point::new(25.82577, 99.72721),
+        Point::new(12.89276, -64.10552),
     ];
 
     // Defaults: WGS84 ellipsoid, DGGS-optimal icosahedron orientation.

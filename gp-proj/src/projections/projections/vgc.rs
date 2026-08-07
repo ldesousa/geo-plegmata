@@ -233,7 +233,7 @@ impl Projection for Vgc {
     ) -> DistortionMetrics {
         let epsilon = 1e-5_f64; // degrees
         let sphere = AuthalicSphere::from_ellipsoid(ellipsoid);
-        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lon, lat));
+        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lat, lon));
 
         let center_xy =
             &self.geo_to_cartesian(vec![to_authalic(lon, lat)], Some(polyhedron), None)[0];
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_point_creation() {
-        let position = Point::new(-9.222154, 38.695125);
+        let position = Point::new(38.695125, -9.222154);
         assert_eq!(position.lon, -9.222154);
         assert_eq!(position.lat, 38.695125);
     }
@@ -445,15 +445,15 @@ mod tests {
     // Forward projection test disabled until Icosahedron implementation is complete
     #[test]
     fn test_project_forward() {
-        let p1 = Point::new(-9.222154, 38.695125);
-        let p2 = Point::new(-138.97503, 47.7022);
-        let p3 = Point::new(99.72721, 25.82577);
-        let p4 = Point::new(-64.10552, 12.89276);
-        let p5 = Point::new(-128.28185, -50.60992);
-        let p6 = Point::new(-70.47681, -0.81784);
-        let p7 = Point::new(152.44705, -21.59114);
-        let p8 = Point::new(66.665798, -77.717034);
-        let p9 = Point::new(63.501735, 80.099071);
+        let p1 = Point::new(38.695125, -9.222154);
+        let p2 = Point::new(47.7022, -138.97503);
+        let p3 = Point::new(25.82577, 99.72721);
+        let p4 = Point::new(12.89276, -64.10552);
+        let p5 = Point::new(-50.60992, -128.28185);
+        let p6 = Point::new(-0.81784, -70.47681);
+        let p7 = Point::new(-21.59114, 152.44705);
+        let p8 = Point::new(-77.717034, 66.665798);
+        let p9 = Point::new(80.099071, 63.501735);
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         let points = vec![p1, p2, p3, p4, p5, p6, p7, p8, p9]
@@ -478,9 +478,9 @@ mod tests {
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         // Test points
-        let lisbon = Point::new(-9.49420, 38.68499);
-        let porto = Point::new(-8.61099, 41.14961); // ~300km north of Lisbon
-        let madrid = Point::new(-3.70379, 40.41678); // ~500km east of Lisbon
+        let lisbon = Point::new(38.68499, -9.49420);
+        let porto = Point::new(41.14961, -8.61099); // ~300km north of Lisbon
+        let madrid = Point::new(40.41678, -3.70379); // ~500km east of Lisbon
 
         let points = vec![lisbon, porto, madrid]
             .into_iter()
@@ -503,11 +503,11 @@ mod tests {
 
         // Points around the pole should be on adjacent faces
         let points = vec![
-            Point::new(0.0, 89.0),
-            Point::new(72.0, 89.0),
-            Point::new(144.0, 89.0),
-            Point::new(216.0, 89.0),
-            Point::new(288.0, 89.0),
+            Point::new(89.0, 0.0),
+            Point::new(89.0, 72.0),
+            Point::new(89.0, 144.0),
+            Point::new(89.0, 216.0),
+            Point::new(89.0, 288.0),
         ]
         .into_iter()
         .map(to_authalic)
@@ -532,7 +532,7 @@ mod tests {
 
         // Points evenly distributed around equator
         let points: Vec<AuthalicCoord> = (0..10)
-            .map(|i| to_authalic(Point::new(i as f64 * 36.0, 0.0)))
+            .map(|i| to_authalic(Point::new(0.0, i as f64 * 36.0)))
             .collect();
 
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
@@ -680,15 +680,15 @@ mod tests {
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         let points = vec![
-            Point::new(-9.222154, 38.695125),
-            Point::new(-138.97503, 47.7022),
-            Point::new(99.72721, 25.82577),
-            Point::new(-64.10552, 12.89276),
-            Point::new(-128.28185, -50.60992),
-            Point::new(-70.47681, -0.81784),
-            Point::new(152.44705, -21.59114),
-            Point::new(66.665798, -77.717034),
-            Point::new(63.501735, 80.099071),
+            Point::new(38.695125, -9.222154),
+            Point::new(47.7022, -138.97503),
+            Point::new(25.82577, 99.72721),
+            Point::new(12.89276, -64.10552),
+            Point::new(-50.60992, -128.28185),
+            Point::new(-0.81784, -70.47681),
+            Point::new(-21.59114, 152.44705),
+            Point::new(-77.717034, 66.665798),
+            Point::new(80.099071, 63.501735),
         ];
 
         let authalic_points: Vec<AuthalicCoord> = points.iter().map(|p| to_authalic(*p)).collect();
@@ -746,7 +746,7 @@ mod tests {
     fn test_geo_to_barycentric_defaults_match_explicit_setup() {
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-        let points = vec![Point::new(-9.222154, 38.695125), Point::new(30.0, 30.0)];
+        let points = vec![Point::new(38.695125, -9.222154), Point::new(30.0, 30.0)];
 
         let defaulted = projection.geo_to_barycentric(points.clone(), None, None, None);
         let explicit = projection.geo_to_barycentric(points, Some(&icosahedron), None, None);

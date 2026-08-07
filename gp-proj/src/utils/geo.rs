@@ -29,9 +29,9 @@ use crate::{models::vector_3d::Vector3D, constants::Tolerance};
 /// 
 /// # Example
 /// ```
-/// use geo::Point;
+/// use geoplegma::types::Point;
 /// use gp_proj::utils::geo_to_cartesian;
-/// 
+///
 /// let cartesian = Point::new(0.0, 0.0); // Equator at prime meridian (in radians)
 /// let result = geo_to_cartesian(&cartesian);
 /// assert!((result.x - 1.0).abs() < 1e-10);
@@ -110,7 +110,7 @@ pub fn create_point(lon: f64, lat: f64) -> Result<Point, String> {
     if !(-180.0..=180.0).contains(&lon) {
         return Err(format!("Longitude must be in range [-180, 180], got {}", lon));
     }
-    Ok(Point::new(lon, lat))
+    Ok(Point::new(lat, lon))
 }
 
 /// Create validated geographic point with automatic longitude normalization
@@ -130,7 +130,7 @@ pub fn create_point_normalized(lon: f64, lat: f64) -> Result<Point, String> {
         return Err(format!("Latitude must be in range [-90, 90], got {}", lat));
     }
     let normalized_lon = normalize_longitude(lon);
-    Ok(Point::new(normalized_lon, lat))
+    Ok(Point::new(lat, normalized_lon))
 }
 
 /// Check if two points are approximately equal within tolerance
@@ -149,7 +149,7 @@ pub fn create_point_normalized(lon: f64, lat: f64) -> Result<Point, String> {
 /// 
 /// # Example
 /// ```
-/// use geo::Point;
+/// use geoplegma::types::Point;
 /// use gp_proj::utils::points_approx_eq;
 /// 
 /// let p1 = Point::new(1.0, 2.0);
@@ -177,11 +177,11 @@ pub fn points_approx_eq(p1: &Point, p2: &Point, tolerance: Option<f64>) -> bool 
 /// 
 /// # Example
 /// ```
-/// use geo::Point;
+/// use geoplegma::types::Point;
 /// use gp_proj::utils::great_circle_distance;
-/// 
+///
 /// let p1 = Point::new(0.0, 0.0);
-/// let p2 = Point::new(1.0, 0.0);
+/// let p2 = Point::new(0.0, 1.0);
 /// let distance = great_circle_distance(&p1, &p2);
 /// assert!(distance > 111000.0); // Approximately 111 km per degree at equator
 /// ```
