@@ -11,7 +11,8 @@
 //! Functions for working with geographic coordinates, including validation,
 //! normalization, and coordinate system conversions.
 
-use geo::Point;
+use geoplegma::types::Point;
+
 use crate::{models::vector_3d::Vector3D, constants::Tolerance};
 
 /// Convert geographic coordinates to 3D Cartesian coordinates on unit sphere
@@ -21,16 +22,16 @@ use crate::{models::vector_3d::Vector3D, constants::Tolerance};
 /// in spherical projections and discrete global grid systems.
 /// 
 /// # Arguments
-/// * `cartesian` - Geographic point with longitude as x() and latitude as y() in radians
+/// * `cartesian` - Geographic point with longitude as lon and latitude as lat in radians
 /// 
 /// # Returns
 /// Vector3D representing the point on the unit sphere
 /// 
 /// # Example
 /// ```
-/// use geo::Point;
+/// use geoplegma::types::Point;
 /// use gp_proj::utils::geo_to_cartesian;
-/// 
+///
 /// let cartesian = Point::new(0.0, 0.0); // Equator at prime meridian (in radians)
 /// let result = geo_to_cartesian(&cartesian);
 /// assert!((result.x - 1.0).abs() < 1e-10);
@@ -38,8 +39,8 @@ use crate::{models::vector_3d::Vector3D, constants::Tolerance};
 /// assert!(result.z.abs() < 1e-10);
 /// ```
 pub fn geo_to_cartesian(cartesian: &Point) -> Vector3D {
-    let lat_rad = cartesian.y();
-    let lon_rad = cartesian.x();
+    let lat_rad = cartesian.lat;
+    let lon_rad = cartesian.lon;
     let cos_lat = lat_rad.cos();
     Vector3D {
         x: cos_lat * lon_rad.cos(),
@@ -109,7 +110,7 @@ pub fn create_point(lon: f64, lat: f64) -> Result<Point, String> {
     if !(-180.0..=180.0).contains(&lon) {
         return Err(format!("Longitude must be in range [-180, 180], got {}", lon));
     }
-    Ok(Point::new(lon, lat))
+    Ok(Point::new(lat, lon))
 }
 
 /// Create validated geographic point with automatic longitude normalization
@@ -129,7 +130,7 @@ pub fn create_point_normalized(lon: f64, lat: f64) -> Result<Point, String> {
         return Err(format!("Latitude must be in range [-90, 90], got {}", lat));
     }
     let normalized_lon = normalize_longitude(lon);
-    Ok(Point::new(normalized_lon, lat))
+    Ok(Point::new(lat, normalized_lon))
 }
 
 /// Check if two points are approximately equal within tolerance
@@ -148,7 +149,7 @@ pub fn create_point_normalized(lon: f64, lat: f64) -> Result<Point, String> {
 /// 
 /// # Example
 /// ```
-/// use geo::Point;
+/// use geoplegma::types::Point;
 /// use gp_proj::utils::points_approx_eq;
 /// 
 /// let p1 = Point::new(1.0, 2.0);
@@ -159,7 +160,7 @@ pub fn create_point_normalized(lon: f64, lat: f64) -> Result<Point, String> {
 /// ```
 pub fn points_approx_eq(p1: &Point, p2: &Point, tolerance: Option<f64>) -> bool {
     let tol = tolerance.unwrap_or(Tolerance::COORDINATE);
-    (p1.x() - p2.x()).abs() < tol && (p1.y() - p2.y()).abs() < tol
+    (p1.lon - p2.lon).abs() < tol && (p1.lat - p2.lat).abs() < tol
 }
 
 /// Calculate great circle distance between two points
@@ -176,21 +177,21 @@ pub fn points_approx_eq(p1: &Point, p2: &Point, tolerance: Option<f64>) -> bool 
 /// 
 /// # Example
 /// ```
-/// use geo::Point;
+/// use geoplegma::types::Point;
 /// use gp_proj::utils::great_circle_distance;
-/// 
+///
 /// let p1 = Point::new(0.0, 0.0);
-/// let p2 = Point::new(1.0, 0.0);
+/// let p2 = Point::new(0.0, 1.0);
 /// let distance = great_circle_distance(&p1, &p2);
 /// assert!(distance > 111000.0); // Approximately 111 km per degree at equator
 /// ```
 pub fn great_circle_distance(p1: &Point, p2: &Point) -> f64 {
     use crate::constants::WGS84;
     
-    let lat1 = p1.y().to_radians();
-    let lat2 = p2.y().to_radians();
+    let lat1 = p1.lat.to_radians();
+    let lat2 = p2.lat.to_radians();
     let dlat = lat2 - lat1;
-    let dlon = (p2.x() - p1.x()).to_radians();
+    let dlon = (p2.lon - p1.lon).to_radians();
     
     let a = (dlat / 2.0).sin().powi(2) + 
             lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
@@ -248,8 +249,8 @@ mod tests {
     fn test_create_point_normalized() {
         // Should normalize longitude but validate latitude
         let result = create_point_normalized(190.0, 45.0).unwrap();
-        assert_eq!(result.x(), -170.0);
-        assert_eq!(result.y(), 45.0);
+        assert_eq!(result.lon, -170.0);
+        assert_eq!(result.lat, 45.0);
         
         // Should still reject invalid latitude
         assert!(create_point_normalized(0.0, 91.0).is_err());
