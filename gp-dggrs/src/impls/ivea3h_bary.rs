@@ -9,29 +9,18 @@
 // except according to those terms.
 
 use crate::sys_api::DggrsSysApi;
-use geo::Point;
-use geoplegma::types::RefinementLevel; 
-use gp_proj::{
-    constants::WGS84,
-    ellipsoid::AuthalicSphere,
-    projections::{
-        polyhedron::{icosahedron, Orientation},
-        projections::{traits::Projection, vgc::Vgc},
-    },
-    utils::shape::cartesian_to_barycentric,
-};
+use geoplegma::types::Point;
+use geoplegma::types::RefinementLevel;
+use gp_proj::projections::projections::{traits::Projection, vgc::Vgc};
 
 pub struct IVEA3HBary {
-
     refinement_level: RefinementLevel,
     denominator: u32,
 }
 
 #[allow(dead_code)]
 impl IVEA3HBary {
-
     pub fn new(refinement_level: RefinementLevel) -> Self {
-
         Self {
             refinement_level: refinement_level,
             denominator: Self::compute_denom(refinement_level),
@@ -39,7 +28,6 @@ impl IVEA3HBary {
     }
 
     pub fn set_refinement_level(&mut self, refinement_level: RefinementLevel) {
-
         self.refinement_level = refinement_level;
         self.denominator = Self::compute_denom(refinement_level);
     }
@@ -51,31 +39,23 @@ impl IVEA3HBary {
             as u32;
     }
 
-    // Fake method for the time being - then use the Projection module
-    pub fn project(point: Point) -> (f64, f64, f64) {
-        return (point.x(), point.y(), (1.0 - point.x() - point.y()));
-    }
-
     // Bundles barycentric coordinates on a icosahedron face into a 64-bit index
     fn bundle_zone_id(&self, i: u32, j: u32, face: i32) -> u64 {
-        
         return i as u64 +                           // i
                j as u64 * 2_u64.pow(26) as u64 +    // j
                face as u64 * 2_u64.pow(52) as u64 + // face
                self.refinement_level.get() as u64 * 2_u64.pow(57) as u64;
-
     }
 
     // Unbundles a 64-bit zone identifier into barycentric coordinates and a face index
     pub fn unbundle_zone_id(zone_id: u64) -> (u64, u64, u64, u64) {
-
         let bary_i = zone_id % 2_u64.pow(26);
-        let mut tail:u64 = zone_id / 2_u64.pow(26);
-        let bary_j = tail % 2_u64.pow(26); 
+        let mut tail: u64 = zone_id / 2_u64.pow(26);
+        let bary_j = tail % 2_u64.pow(26);
         tail = tail / 2_u64.pow(26);
         let face = tail % 2_u64.pow(5);
         let level = tail / 2_u64.pow(5);
-    
+
         return (bary_i, bary_j, face, level);
     }
 
@@ -87,11 +67,10 @@ impl IVEA3HBary {
     }
 
     fn find_nearest_zone_centre(&self, bary: (f64, f64)) -> (u32, u32) {
-
         let mut zone_centre = (1 as u32, 1 as u32); // the result
 
         let mut candidates: Vec<(u32, u32)> = Vec::new();
-        
+
         let j_down = (bary.1 * self.denominator as f64).floor() as u32;
         let j_up = (bary.1 * self.denominator as f64).ceil() as u32;
 
@@ -99,7 +78,8 @@ impl IVEA3HBary {
         if (self.refinement_level.get() % 2) > 0 {
             let start_down = j_down % Self::APERTURE;
             let start_up = j_up % Self::APERTURE;
-            let num_hops = (bary.0 * self.denominator as f64 / Self::APERTURE as f64).floor() as u32; // integer division
+            let num_hops =
+                (bary.0 * self.denominator as f64 / Self::APERTURE as f64).floor() as u32; // integer division
             let i_down: u32 = start_down + num_hops * Self::APERTURE;
             let i_up: u32 = start_up + num_hops * Self::APERTURE;
             candidates.push((i_down, j_down));
@@ -136,7 +116,7 @@ impl IVEA3HBary {
                 zone_centre = centre;
             }
         }
-        
+
         println!("Winner {:?}", zone_centre);
         return zone_centre;
     }
@@ -268,31 +248,16 @@ impl DggrsSysApi for IVEA3HBary {
         point: Point,
         //config: Option<DggrsApiConfig>,
     ) -> u64 {
-
-        let projection = Vgc::default();
-        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-        let sphere = AuthalicSphere::from_ellipsoid(&WGS84);
-        let conv_point = sphere.convert(point);
-        let projected = projection.geo_to_cartesian(vec![conv_point], Some(&icosahedron), None);
-
-        let face : i32 = projected[0].face.try_into().unwrap();
-        let triangle = projected[0].triangle;
-        let bary_coords = cartesian_to_barycentric(
-            (
-                projected[0].coords.x / 6371007.181,
-                projected[0].coords.y / 6371007.181,
-            ),
-            triangle[0],
-            triangle[1],
-            triangle[2],
-        );
-        let bary = (bary_coords.0, bary_coords.2);
+        // Icosahedron selected by default
+        let bary = Vgc::default().geo_to_barycentric(vec![point], None, None, None);
 
         println!("Barycentric: {:?}", bary);
 
-        let zone_centre = IVEA3HBary::find_nearest_zone_centre(self, bary);
+        let zone_centre =
+            IVEA3HBary::find_nearest_zone_centre(self, (bary[0].coords.x, bary[0].coords.y));
 
-        let unique = IVEA3HBary::edge_cases(self, zone_centre.0, zone_centre.1, face);
+        let unique =
+            IVEA3HBary::edge_cases(self, zone_centre.0, zone_centre.1, bary[0].face as i32);
         println!("After edge cases: {:?}", unique);
 
         // Bundle index into 64 bit
@@ -300,3 +265,14 @@ impl DggrsSysApi for IVEA3HBary {
     }
 }
 
+#[cfg(test)]
+#[path = "ivea3h_bary_test.rs"]
+mod ivea3h_bary_test;
+
+//fn test_find_nearest_zone_centre() {}
+//
+//fn test_bundle_zone_id() {}
+//
+//fn test_unbundle_zone_id() {}
+//
+//fn test_edge_cases() {}

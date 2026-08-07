@@ -1,6 +1,5 @@
 //use api::error::DggrsError;
-use geo::Point;
-use geoplegma::types::RefinementLevel; //, Zones};
+use geoplegma::types::{Point, RefinementLevel};
 
 pub trait DggrsSysApi {
     const APERTURE: u32;
