@@ -10,20 +10,25 @@
 use std::f64::consts::{E, PI};
 
 use crate::{
-    constants::WGS84, ellipsoid::{AuthalicCoord, AuthalicSphere, Ellipsoid}, models::vector_3d::Vector3D, projections::{
+    constants::WGS84,
+    ellipsoid::{AuthalicCoord, AuthalicSphere, Ellipsoid},
+    models::vector_3d::Vector3D,
+    projections::{
         layout::traits::Layout,
-        polyhedron::{ArcLengths, Polyhedron},
-        projections::traits::{DistortionMetrics, ForwardCartesian, Projection},
-    }, utils::shape::triangle,
+        polyhedron::{ArcLengths, Orientation, Polyhedron, icosahedron, spherical_geometry},
+        projections::traits::{DistortionMetrics, ForwardBary, ForwardCartesian, Projection},
+    },
+    utils::shape::triangle,
 };
-use geo::{Coord, Point};
+use geo::Coord;
+use geoplegma::types::Point;
 
 // SUB_TRIANGLE_TEMPLATE
 // Each icosahedron face is divided into 6 sub-triangles by connecting the face center
 // to the midpoints of each edge. All 6 sub-triangles are congruent right triangles.
 // Arc lengths measured on the unit sphere for one sub-triangle:
 //   ab (corner to mid) = 0.553574 rad
-//   bc (corner to center) = 0.652358 rad  
+//   bc (corner to center) = 0.652358 rad
 //   ac (mid to center) = 0.364864 rad
 // Template is built with B (corner) at origin, A (mid) on negative x-axis,
 // C (center) placed using law of cosines at B:
@@ -35,9 +40,9 @@ use geo::{Coord, Point};
 // All coordinates multiplied by 1.018606 to match spherical sub-triangle area.
 const SCALE_SUB: f64 = 1.018606;
 const SUB_TRIANGLE_TEMPLATE: [(f64, f64); 3] = [
-    (0.0,                           0.0),        // B = corner (origin)
-    (-0.553574 * SCALE_SUB,         0.0),        // A = mid
-    ( 0.540930 * SCALE_SUB,         0.364645 * SCALE_SUB), // C = center
+    (0.0, 0.0),                                   // B = corner (origin)
+    (-0.553574 * SCALE_SUB, 0.0),                 // A = mid
+    (0.540930 * SCALE_SUB, 0.364645 * SCALE_SUB), // C = center
 ];
 // FACE_TEMPLATE_UP and FACE_TEMPLATE_DOWN
 // Edge lengths come from the regular icosahedron on a unit sphere:
@@ -51,28 +56,27 @@ const SUB_TRIANGLE_TEMPLATE: [(f64, f64); 3] = [
 // ensuring the equal-area property is preserved when mapping to the face plane.
 const SCALE_FACE: f64 = 1.0880715;
 const FACE_TEMPLATE_UP: [(f64, f64); 3] = [
-    (0.0,                          0.0),
-    (-1.107149 * SCALE_FACE,       0.0),
-    (-0.553574 * SCALE_FACE,       0.958819 * SCALE_FACE),
+    (0.0, 0.0),
+    (-1.107149 * SCALE_FACE, 0.0),
+    (-0.553574 * SCALE_FACE, 0.958819 * SCALE_FACE),
 ];
 const FACE_TEMPLATE_DOWN: [(f64, f64); 3] = [
-    (0.0,                          0.0),
-    (-1.107149 * SCALE_FACE,       0.0),
-    (-0.553574 * SCALE_FACE,      -0.958819 * SCALE_FACE),
+    (0.0, 0.0),
+    (-1.107149 * SCALE_FACE, 0.0),
+    (-0.553574 * SCALE_FACE, -0.958819 * SCALE_FACE),
 ];
-
 
 /// Implementation for Vertex Great Circle projection (or van Leeuwen Great Circle projection).
 /// vgc - Vertex-oriented Great Circle projection.
 /// Based on the slice and dice approach from this article:
 /// http://dx.doi.org/10.1559/152304006779500687
-pub struct Vgc{
+pub struct Vgc {
     pub radius: f64,
 }
 
-impl Default for Vgc{
+impl Default for Vgc {
     fn default() -> Self {
-        Self{
+        Self {
             radius: WGS84::AUTHALIC_RADIUS,
         }
     }
@@ -164,6 +168,57 @@ impl Projection for Vgc {
         out
     }
 
+    fn geo_to_barycentric(
+        &self,
+        points: Vec<Point>,
+        polyhedron: Option<&Polyhedron>,
+        orientation: Option<Orientation>,
+        ellipsoid: Option<&dyn Ellipsoid>,
+    ) -> Vec<ForwardBary> {
+        let ellipsoid: &dyn Ellipsoid = ellipsoid.unwrap_or(&WGS84);
+        let sphere = AuthalicSphere::from_ellipsoid(ellipsoid);
+        let authalic_points = points.into_iter().map(|p| sphere.convert(p)).collect();
+
+        let built;
+        let polyhedron = match polyhedron {
+            Some(polyhedron) => polyhedron,
+            None => {
+                built = icosahedron::new(orientation.unwrap_or(Orientation::DGGS_OPTIMAL));
+                &built
+            }
+        };
+
+        self.geo_to_cartesian(authalic_points, Some(polyhedron), None)
+            .into_iter()
+            .map(|ForwardCartesian { coords, face }| {
+                let is_upward = face % 2 == 0;
+                let face_template = if is_upward {
+                    FACE_TEMPLATE_UP
+                } else {
+                    FACE_TEMPLATE_DOWN
+                };
+                let r = self.radius;
+                // Same face-plane triangle geo_to_cartesian projected into (scaled by `r`
+                // to match `coords`), reused here as the reference triangle for the
+                // point's barycentric weights.
+                let triangle = face_template.map(|(x, y)| Vector3D::new(x * r, y * r, 0.0));
+                let point = Vector3D::new(coords.x, coords.y, 0.0);
+
+                // barycentric_coordinates(point, [v0, v1, v2]) returns (u, v, w) where,
+                // perhaps counter-intuitively, `u` is the weight of `v2`, `v` of `v1`, and
+                // `w` of `v0` (verified at the vertices). Reorder here so `coords.x/y/z`
+                // line up with `triangle[0]/[1]/[2]` (i.e. `face_template[0]/[1]/[2]`).
+                let (u, v, w) = spherical_geometry::barycentric_coordinates(point, triangle)
+                    .unwrap_or((f64::NAN, f64::NAN, f64::NAN));
+
+                ForwardBary {
+                    coords: Vector3D::new(w, v, u),
+                    face,
+                }
+            })
+            .collect()
+    }
+
     fn cartesian_to_geo(&self, _coords: Vec<Coord>) -> Point {
         todo!()
     }
@@ -178,14 +233,20 @@ impl Projection for Vgc {
     ) -> DistortionMetrics {
         let epsilon = 1e-5_f64; // degrees
         let sphere = AuthalicSphere::from_ellipsoid(ellipsoid);
-        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lon, lat));
+        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lat, lon));
 
-        let center_xy = 
+        let center_xy =
             &self.geo_to_cartesian(vec![to_authalic(lon, lat)], Some(polyhedron), None)[0];
-        let north_xy =
-            &self.geo_to_cartesian(vec![to_authalic(lon, lat + epsilon)], Some(polyhedron), None)[0];
-        let east_xy = 
-            &self.geo_to_cartesian(vec![to_authalic(lon + epsilon, lat)], Some(polyhedron), None)[0];
+        let north_xy = &self.geo_to_cartesian(
+            vec![to_authalic(lon, lat + epsilon)],
+            Some(polyhedron),
+            None,
+        )[0];
+        let east_xy = &self.geo_to_cartesian(
+            vec![to_authalic(lon + epsilon, lat)],
+            Some(polyhedron),
+            None,
+        )[0];
         if center_xy.face != north_xy.face || center_xy.face != east_xy.face {
             return DistortionMetrics {
                 h: f64::NAN,
@@ -322,8 +383,14 @@ fn affine_transform_triangle(
     dest_tri: [(f64, f64); 3],
 ) -> (f64, f64) {
     // Source vectors relative to source_tri[0]
-    let (ax, ay) = (source_tri[1].0 - source_tri[0].0, source_tri[1].1 - source_tri[0].1);
-    let (bx, by) = (source_tri[2].0 - source_tri[0].0, source_tri[2].1 - source_tri[0].1);
+    let (ax, ay) = (
+        source_tri[1].0 - source_tri[0].0,
+        source_tri[1].1 - source_tri[0].1,
+    );
+    let (bx, by) = (
+        source_tri[2].0 - source_tri[0].0,
+        source_tri[2].1 - source_tri[0].1,
+    );
 
     // Destination vectors relative to dest_tri[0]
     let (cx, cy) = (dest_tri[1].0 - dest_tri[0].0, dest_tri[1].1 - dest_tri[0].1);
@@ -348,13 +415,15 @@ fn affine_transform_triangle(
 // @TODO - new tests need to be added.
 #[cfg(test)]
 mod tests {
-    use geo::Point;
 
+    use geoplegma::types::Point;
+
+    use super::{FACE_TEMPLATE_DOWN, FACE_TEMPLATE_UP};
     use crate::{
         constants::WGS84,
         ellipsoid::{AuthalicCoord, AuthalicSphere},
         projections::{
-            polyhedron::{icosahedron, Orientation},
+            polyhedron::{Orientation, icosahedron},
             projections::{traits::Projection, vgc::Vgc},
         },
     };
@@ -368,23 +437,23 @@ mod tests {
 
     #[test]
     fn test_point_creation() {
-        let position = Point::new(-9.222154, 38.695125);
-        assert_eq!(position.x(), -9.222154);
-        assert_eq!(position.y(), 38.695125);
+        let position = Point::new(38.695125, -9.222154);
+        assert_eq!(position.lon, -9.222154);
+        assert_eq!(position.lat, 38.695125);
     }
 
     // Forward projection test disabled until Icosahedron implementation is complete
     #[test]
     fn test_project_forward() {
-        let p1 = Point::new(-9.222154, 38.695125);
-        let p2 = Point::new(-138.97503, 47.7022);
-        let p3 = Point::new(99.72721, 25.82577);
-        let p4 = Point::new(-64.10552, 12.89276);
-        let p5 = Point::new(-128.28185, -50.60992);
-        let p6 = Point::new(-70.47681, -0.81784);
-        let p7 = Point::new(152.44705, -21.59114);
-        let p8 = Point::new(66.665798, -77.717034);
-        let p9 = Point::new(63.501735, 80.099071);
+        let p1 = Point::new(38.695125, -9.222154);
+        let p2 = Point::new(47.7022, -138.97503);
+        let p3 = Point::new(25.82577, 99.72721);
+        let p4 = Point::new(12.89276, -64.10552);
+        let p5 = Point::new(-50.60992, -128.28185);
+        let p6 = Point::new(-0.81784, -70.47681);
+        let p7 = Point::new(-21.59114, 152.44705);
+        let p8 = Point::new(-77.717034, 66.665798);
+        let p9 = Point::new(80.099071, 63.501735);
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         let points = vec![p1, p2, p3, p4, p5, p6, p7, p8, p9]
@@ -409,11 +478,14 @@ mod tests {
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         // Test points
-        let lisbon = Point::new(-9.49420, 38.68499);
-        let porto = Point::new(-8.61099, 41.14961); // ~300km north of Lisbon
-        let madrid = Point::new(-3.70379, 40.41678); // ~500km east of Lisbon
+        let lisbon = Point::new(38.68499, -9.49420);
+        let porto = Point::new(41.14961, -8.61099); // ~300km north of Lisbon
+        let madrid = Point::new(40.41678, -3.70379); // ~500km east of Lisbon
 
-        let points = vec![lisbon, porto, madrid].into_iter().map(to_authalic).collect();
+        let points = vec![lisbon, porto, madrid]
+            .into_iter()
+            .map(to_authalic)
+            .collect();
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
 
         // Porto should be on same or adjacent face to Lisbon
@@ -431,11 +503,11 @@ mod tests {
 
         // Points around the pole should be on adjacent faces
         let points = vec![
-            Point::new(0.0, 89.0),
-            Point::new(72.0, 89.0),
-            Point::new(144.0, 89.0),
-            Point::new(216.0, 89.0),
-            Point::new(288.0, 89.0),
+            Point::new(89.0, 0.0),
+            Point::new(89.0, 72.0),
+            Point::new(89.0, 144.0),
+            Point::new(89.0, 216.0),
+            Point::new(89.0, 288.0),
         ]
         .into_iter()
         .map(to_authalic)
@@ -460,7 +532,7 @@ mod tests {
 
         // Points evenly distributed around equator
         let points: Vec<AuthalicCoord> = (0..10)
-            .map(|i| to_authalic(Point::new(i as f64 * 36.0, 0.0)))
+            .map(|i| to_authalic(Point::new(0.0, i as f64 * 36.0)))
             .collect();
 
         let results = projection.geo_to_cartesian(points, Some(&icosahedron), None);
@@ -479,8 +551,14 @@ mod tests {
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         let points = vec![
-            AuthalicCoord { lon: -9.222154_f64.to_radians(), lat: 38.695125_f64.to_radians() },
-            AuthalicCoord { lon: 99.72721_f64.to_radians(), lat: 25.82577_f64.to_radians() },
+            AuthalicCoord {
+                lon: -9.222154_f64.to_radians(),
+                lat: 38.695125_f64.to_radians(),
+            },
+            AuthalicCoord {
+                lon: 99.72721_f64.to_radians(),
+                lat: 25.82577_f64.to_radians(),
+            },
         ];
 
         let result = projection.geo_to_cartesian(points, Some(&icosahedron), None);
@@ -507,11 +585,11 @@ mod tests {
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
 
         let points = [
-            (38.68499, -9.49420),   // Lisbon
-            (-33.8688, 151.2093),   // Sydney
-            (64.1466, -21.9426),    // Reykjavik
-            (1.3521, 103.8198),     // Singapore, near-equator
-            (-89.0, 0.0),           // near south pole
+            (38.68499, -9.49420), // Lisbon
+            (-33.8688, 151.2093), // Sydney
+            (64.1466, -21.9426),  // Reykjavik
+            (1.3521, 103.8198),   // Singapore, near-equator
+            (-89.0, 0.0),         // near south pole
         ];
 
         // compute_distortion uses a fixed 1e-5° finite-difference step. Near
@@ -589,5 +667,96 @@ mod tests {
             "std 2ω = {:.4} rad, expected ~0.028 rad (Table 1, icosahedron/VGC)",
             std_dev
         );
+    }
+
+    /// `geo_to_barycentric` should reproduce `geo_to_cartesian`'s face id, and its weights
+    /// should reconstruct the same face-plane point when combined with the face template —
+    /// i.e. `sum(coords[k] * face_template[k]) * radius == geo_to_cartesian's coords`.
+    /// This is the strongest correctness check: it doesn't depend on guessing expected
+    /// numeric values, only on the two methods agreeing with each other.
+    #[test]
+    fn test_geo_to_barycentric_round_trip_matches_cartesian() {
+        let projection = Vgc::default();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+
+        let points = vec![
+            Point::new(38.695125, -9.222154),
+            Point::new(47.7022, -138.97503),
+            Point::new(25.82577, 99.72721),
+            Point::new(12.89276, -64.10552),
+            Point::new(-50.60992, -128.28185),
+            Point::new(-0.81784, -70.47681),
+            Point::new(-21.59114, 152.44705),
+            Point::new(-77.717034, 66.665798),
+            Point::new(80.099071, 63.501735),
+        ];
+
+        let authalic_points: Vec<AuthalicCoord> = points.iter().map(|p| to_authalic(*p)).collect();
+        let cartesian = projection.geo_to_cartesian(authalic_points, Some(&icosahedron), None);
+        let bary = projection.geo_to_barycentric(points, Some(&icosahedron), None, None);
+
+        assert_eq!(cartesian.len(), bary.len());
+
+        for (c, b) in cartesian.iter().zip(bary.iter()) {
+            assert_eq!(c.face, b.face, "face id should match geo_to_cartesian");
+
+            let sum = b.coords.x + b.coords.y + b.coords.z;
+            assert!(
+                (sum - 1.0).abs() < 1e-9,
+                "barycentric weights should sum to 1, got {}",
+                sum
+            );
+
+            let is_upward = c.face % 2 == 0;
+            let template = if is_upward {
+                FACE_TEMPLATE_UP
+            } else {
+                FACE_TEMPLATE_DOWN
+            };
+            let r = projection.radius;
+
+            let reconstructed_x = b.coords.x * template[0].0 * r
+                + b.coords.y * template[1].0 * r
+                + b.coords.z * template[2].0 * r;
+            let reconstructed_y = b.coords.x * template[0].1 * r
+                + b.coords.y * template[1].1 * r
+                + b.coords.z * template[2].1 * r;
+
+            assert!(
+                (reconstructed_x - c.coords.x).abs() < 1e-6,
+                "reconstructed x {} != cartesian x {} (face {})",
+                reconstructed_x,
+                c.coords.x,
+                c.face
+            );
+            assert!(
+                (reconstructed_y - c.coords.y).abs() < 1e-6,
+                "reconstructed y {} != cartesian y {} (face {})",
+                reconstructed_y,
+                c.coords.y,
+                c.face
+            );
+        }
+    }
+
+    /// `geo_to_barycentric` with no `polyhedron`/`orientation`/`ellipsoid` should default to
+    /// WGS84 + a DGGS-optimal icosahedron, matching what callers get by building those
+    /// explicitly (this is the whole point of the convenience method).
+    #[test]
+    fn test_geo_to_barycentric_defaults_match_explicit_setup() {
+        let projection = Vgc::default();
+        let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
+        let points = vec![Point::new(38.695125, -9.222154), Point::new(30.0, 30.0)];
+
+        let defaulted = projection.geo_to_barycentric(points.clone(), None, None, None);
+        let explicit = projection.geo_to_barycentric(points, Some(&icosahedron), None, None);
+
+        assert_eq!(defaulted.len(), explicit.len());
+        for (d, e) in defaulted.iter().zip(explicit.iter()) {
+            assert_eq!(d.face, e.face);
+            assert!((d.coords.x - e.coords.x).abs() < 1e-12);
+            assert!((d.coords.y - e.coords.y).abs() < 1e-12);
+            assert!((d.coords.z - e.coords.z).abs() < 1e-12);
+        }
     }
 }
