@@ -8,6 +8,5 @@ rust-version = "1.88"
 
 [dependencies]
 geo = "0.30.0"
-base64 = "0.22"
 geoplegma = { path = "../geoplegma" }
 gp-proj = { path = "../gp-proj" }

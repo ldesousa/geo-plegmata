@@ -34,17 +34,15 @@ impl IVEA3HBary {
 
     // Denominator is a power of the APERTURE, but only increases every other resolution.
     fn compute_denom(refinement_level: RefinementLevel) -> u32 {
-        return Self::APERTURE
-            .pow((refinement_level.get() as u32 + refinement_level.get() as u32 % 2) / 2)
-            as u32;
+        Self::APERTURE.pow((refinement_level.get() as u32 + refinement_level.get() as u32 % 2) / 2)
     }
 
     // Bundles barycentric coordinates on a icosahedron face into a 64-bit index
     fn bundle_zone_id(&self, i: u32, j: u32, face: i32) -> u64 {
-        return i as u64 +                           // i
-               j as u64 * 2_u64.pow(26) as u64 +    // j
-               face as u64 * 2_u64.pow(52) as u64 + // face
-               self.refinement_level.get() as u64 * 2_u64.pow(57) as u64;
+        i as u64 +                         // i
+        j as u64 * 2_u64.pow(26) +    // j
+        face as u64 * 2_u64.pow(52) + // face
+        self.refinement_level.get() as u64 * 2_u64.pow(57)
     }
 
     // Unbundles a 64-bit zone identifier into barycentric coordinates and a face index
@@ -56,18 +54,18 @@ impl IVEA3HBary {
         let face = tail % 2_u64.pow(5);
         let level = tail / 2_u64.pow(5);
 
-        return (bary_i, bary_j, face, level);
+        (bary_i, bary_j, face, level)
     }
 
     // Computes distance with barycentric coordinates defined by an equilateral triangle.
     fn bary_distance(i1: f64, j1: f64, i2: f64, j2: f64) -> f64 {
         let d1 = i1 - j1;
         let d2 = i2 - j2;
-        return d1.powi(2) + d2.powi(2) + d1 * d2;
+        d1.powi(2) + d2.powi(2) + d1 * d2
     }
 
     fn find_nearest_zone_centre(&self, bary: (f64, f64)) -> (u32, u32) {
-        let mut zone_centre = (1 as u32, 1 as u32); // the result
+        let mut zone_centre = (1, 1); // the result
 
         let mut candidates: Vec<(u32, u32)> = Vec::new();
 
@@ -268,11 +266,3 @@ impl DggrsSysApi for IVEA3HBary {
 #[cfg(test)]
 #[path = "ivea3h_bary_test.rs"]
 mod ivea3h_bary_test;
-
-//fn test_find_nearest_zone_centre() {}
-//
-//fn test_bundle_zone_id() {}
-//
-//fn test_unbundle_zone_id() {}
-//
-//fn test_edge_cases() {}

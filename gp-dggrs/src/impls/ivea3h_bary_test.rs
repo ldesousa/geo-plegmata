@@ -9,14 +9,13 @@
 // except according to those terms.
 
 use crate::impls::ivea3h_bary::IVEA3HBary;
-use base64::{Engine as _, engine::general_purpose};
 use geoplegma::types::RefinementLevel;
 
-#[cfg(test)]
+#[test]
 fn test_find_nearest_zone_centre() {
     let mut system = IVEA3HBary::new(RefinementLevel::new(3).unwrap());
-    let bary1 = (0.21 as f64, 0.64 as f64);
-    let bary2 = (0.45 as f64, 0.22 as f64);
+    let bary1 = (0.21, 0.64);
+    let bary2 = (0.45, 0.22);
 
     let mut centre = system.find_nearest_zone_centre(bary1);
     assert_eq!(centre.0, 2);
@@ -49,15 +48,13 @@ fn test_find_nearest_zone_centre() {
 
 #[test]
 fn test_bundle_zone_id() {
-    //    let mut system = IVEA3HBary::new(RefinementLevel::new(3).unwrap());
-    //    let mut i = 2;
-    //    let mut j = 5;
-    //    let mut face = 7;
-    //
-    //    assert_eq!(
-    //        base64::encode(hex::decode("0x670000014000002").unwrap()),
-    //        system.bundle_zone_id(i, j, face)
-    //    );
+    let system = IVEA3HBary::new(RefinementLevel::new(3).unwrap());
+    let i = 2;
+    let j = 5;
+    let face = 7;
+    let zone_id = 0x0270000014000002u64;
+
+    assert_eq!(zone_id, system.bundle_zone_id(i, j, face));
 }
 
 #[test]
