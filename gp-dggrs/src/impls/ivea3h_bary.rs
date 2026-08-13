@@ -46,13 +46,13 @@ impl IVEA3HBary {
     }
 
     // Unbundles a 64-bit zone identifier into barycentric coordinates and a face index
-    pub fn unbundle_zone_id(zone_id: u64) -> (u64, u64, u64, u64) {
-        let bary_i = zone_id % 2_u64.pow(26);
+    pub fn unbundle_zone_id(zone_id: u64) -> (u32, u32, i32, RefinementLevel) {
+        let bary_i: u32 = (zone_id % 2_u64.pow(26)) as u32;
         let mut tail: u64 = zone_id / 2_u64.pow(26);
-        let bary_j = tail % 2_u64.pow(26);
+        let bary_j: u32 = (tail % 2_u64.pow(26)) as u32;
         tail = tail / 2_u64.pow(26);
-        let face = tail % 2_u64.pow(5);
-        let level = tail / 2_u64.pow(5);
+        let face: i32 = (tail % 2_u64.pow(5)) as i32;
+        let level = RefinementLevel::new((tail / 2_u64.pow(5)) as i32).expect("REASON");
 
         (bary_i, bary_j, face, level)
     }

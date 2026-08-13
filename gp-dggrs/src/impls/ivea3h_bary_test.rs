@@ -22,7 +22,7 @@ fn test_find_nearest_zone_centre() {
     assert_eq!(centre.1, 5);
 
     centre = system.find_nearest_zone_centre(bary2);
-    assert_eq!(centre.0, 5); // ==> Verify this one !!!!
+    assert_eq!(centre.0, 5);
     assert_eq!(centre.1, 2);
 
     system.set_refinement_level(RefinementLevel::new(4).unwrap());
@@ -52,21 +52,15 @@ fn test_bundle_zone_id() {
     let i = 2;
     let j = 5;
     let face = 7;
-    let zone_id = 0x0270000014000002u64;
+    let zone_id = 0x0670000014000002u64;
 
     assert_eq!(zone_id, system.bundle_zone_id(i, j, face));
-}
 
-#[test]
-fn test_unbundle_zone_id() {
-    //    let mut system = IVEA3HBary::new(RefinementLevel::new(3).unwrap());
-    //
-    //    let (i, j, face, level) =
-    //        system.unbundle_zone_id(base64::encode(hex::decode("0x670000014000002").unwrap()));
-    //    assert_eq!(i, 2);
-    //    assert_eq!(j, 5);
-    //    assert_eq!(face, 7);
-    //    assert_eq!(level, 3);
+    let (r_i, r_j, r_face, r_level) = IVEA3HBary::unbundle_zone_id(zone_id);
+    assert_eq!(i, r_i);
+    assert_eq!(j, r_j);
+    assert_eq!(face, r_face);
+    assert_eq!(system.refinement_level, r_level);
 }
 
 #[test]

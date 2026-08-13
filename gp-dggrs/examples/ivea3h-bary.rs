@@ -41,7 +41,7 @@ pub fn main() {
     assert_eq!(unbundled.0, 4);
     assert_eq!(unbundled.1, 4);
     assert_eq!(unbundled.2, 3);
-    assert_eq!(unbundled.3, 3);
+    assert_eq!(unbundled.3, RefinementLevel::new(3).expect("REASON"));
 
     println!("Point 2 {} {}", p2.lat, p2.lon);
     let zone2 = system.zone_from_point(level, p2);
@@ -53,7 +53,7 @@ pub fn main() {
     assert_eq!(unbundled.0, 4);
     assert_eq!(unbundled.1, 4);
     assert_eq!(unbundled.2, 5);
-    assert_eq!(unbundled.3, 3);
+    assert_eq!(unbundled.3, RefinementLevel::new(3).expect("REASON"));
 
     println!("Point 3 {} {}", p3.lat, p3.lon);
     let zone3 = system.zone_from_point(level, p3);
@@ -65,7 +65,7 @@ pub fn main() {
     assert_eq!(unbundled.0, 0);
     assert_eq!(unbundled.1, 6);
     assert_eq!(unbundled.2, 9);
-    assert_eq!(unbundled.3, 3);
+    assert_eq!(unbundled.3, RefinementLevel::new(3).expect("REASON"));
 
     println!("Point 4 {} {}", p4.lat, p4.lon);
     let zone4 = system.zone_from_point(level, p4);
@@ -77,7 +77,7 @@ pub fn main() {
     assert_eq!(unbundled.0, 1);
     assert_eq!(unbundled.1, 1);
     assert_eq!(unbundled.2, 1);
-    assert_eq!(unbundled.3, 3);
+    assert_eq!(unbundled.3, RefinementLevel::new(3).expect("REASON"));
 
     println!("Point 5 {} {}", p5.lat, p5.lon);
     let zone5 = system.zone_from_point(level, p5);
@@ -89,70 +89,5 @@ pub fn main() {
     assert_eq!(unbundled.0, 2);
     assert_eq!(unbundled.1, 2);
     assert_eq!(unbundled.2, 9);
-    assert_eq!(unbundled.3, 3);
-
-    //    let level = RefinementLevel::new(4).unwrap();
-    //
-    //    println!("\n== Resolution 4 ==");
-    //    println!("Point 1 {} {}", p1.lat, p1.lon);
-    //    let zone3 = system.zone_from_point(level, p1);
-    //    unbundled = IVEA3HBary::unbundle_zone_id(zone3);
-    //    assert_eq!(unbundled.0, 4);
-    //    assert_eq!(unbundled.1, 2);
-    //    assert_eq!(unbundled.2, 10);
-    //    assert_eq!(unbundled.3, 4);
-    //
-    //    println!("Point 2 {} {}", p2.lat, p2.lon);
-    //    let zone4 = system.zone_from_point(level, p2);
-    //    unbundled = IVEA3HBary::unbundle_zone_id(zone4);
-    //    assert_eq!(unbundled.0, 2);
-    //    assert_eq!(unbundled.1, 6);
-    //    assert_eq!(unbundled.2, 10);
-    //    assert_eq!(unbundled.3, 4);
-    //
-    //    let level = RefinementLevel::new(5).unwrap();
-    //
-    //    println!("\n== Resolution 5 ==");
-    //    println!("Point 1 {} {}", p1.lat, p1.lon);
-    //    let zone3 = system.zone_from_point(level, p1);
-    //    unbundled = IVEA3HBary::unbundle_zone_id(zone3);
-    //    assert_eq!(unbundled.0, 12);
-    //    assert_eq!(unbundled.1, 6);
-    //    assert_eq!(unbundled.2, 10);
-    //    assert_eq!(unbundled.3, 5);
-    //
-    //    println!("Point 2 {} {}", p2.lat, p2.lon);
-    //    let zone4 = system.zone_from_point(level, p2);
-    //    unbundled = IVEA3HBary::unbundle_zone_id(zone4);
-    //    assert_eq!(unbundled.0, 5);
-    //    assert_eq!(unbundled.1, 17);
-    //    assert_eq!(unbundled.2, 10);
-    //    assert_eq!(unbundled.3, 5);
-    //
-    //    let level = RefinementLevel::new(6).unwrap();
-    //
-    //    println!("\n== Resolution 6 ==");
-    //    println!("Point 1 {} {}", p1.lat, p1.lon);
-    //    let zone3 = system.zone_from_point(level, p1);
-    //    unbundled = IVEA3HBary::unbundle_zone_id(zone3);
-    //    assert_eq!(unbundled.0, 12);
-    //    assert_eq!(unbundled.1, 6);
-    //    assert_eq!(unbundled.2, 10);
-    //    assert_eq!(unbundled.3, 6);
-    //
-    //    println!("Point 2 {} {}", p2.lat, p2.lon);
-    //    let zone4 = system.zone_from_point(level, p2);
-    //    unbundled = IVEA3HBary::unbundle_zone_id(zone4);
-    //    assert_eq!(unbundled.0, 6);
-    //    assert_eq!(unbundled.1, 17);
-    //    assert_eq!(unbundled.2, 10);
-    //    assert_eq!(unbundled.3, 6);
-
-    //println!("Point 3 {} {}", p3.lat, p3.lon);
-    //let zone5 = system.zone_from_point(level, p3);
-    //unbundled = IVEA3HBary::unbundle_zone_id(zone5);
-    //assert_eq!(unbundled.0, 20);
-    //assert_eq!(unbundled.1, 3);
-    //assert_eq!(unbundled.2, 10);
-    //assert_eq!(unbundled.3, 6);
+    assert_eq!(unbundled.3, RefinementLevel::new(3).expect("REASON"));
 }
