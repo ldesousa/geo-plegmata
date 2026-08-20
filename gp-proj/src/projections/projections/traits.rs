@@ -52,9 +52,7 @@ pub trait Projection {
         layout: Option<&dyn Layout>,
     ) -> Vec<ForwardCartesian>;
 
-    fn cartesian_to_geo(&self, coords: Vec<Coord>) -> Point;
-
-    fn compute_distortion(
+    fn cartesian_to_geo(
         &self,
         coords: Vec<ForwardCartesian>,
         polyhedron: Option<&Polyhedron>,

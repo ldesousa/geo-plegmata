@@ -10,15 +10,9 @@
 use std::f64::consts::PI;
 
 use crate::{
-    constants::WGS84,
-    ellipsoid::{AuthalicCoord, AuthalicSphere, Ellipsoid},
-    models::vector_3d::Vector3D,
-    projections::{
-        layout::traits::Layout,
-        polyhedron::{ArcLengths, Polyhedron, spherical_geometry::stable_angle_between},
-        projections::traits::{DistortionMetrics, ForwardCartesian, Projection},
-    },
-    utils::shape::triangle,
+    constants::WGS84, ellipsoid::{AuthalicCoord, AuthalicSphere, Ellipsoid}, models::vector_3d::Vector3D, projections::{
+        layout::traits::Layout, polyhedron::{ArcLengths, Orientation, Polyhedron, icosahedron, spherical_geometry::{self, stable_angle_between}}, projections::traits::{DistortionMetrics, ForwardBary, ForwardCartesian, Projection},
+    }, utils::shape::triangle,
 };
 use geo::Coord;
 use geoplegma::types::Point;
@@ -270,6 +264,8 @@ impl Projection for Vgc {
             }));
         }
         out
+    }
+
     fn geo_to_barycentric(
         &self,
         points: Vec<Point>,
@@ -279,7 +275,7 @@ impl Projection for Vgc {
     ) -> Vec<ForwardBary> {
         let ellipsoid: &dyn Ellipsoid = ellipsoid.unwrap_or(&WGS84);
         let sphere = AuthalicSphere::from_ellipsoid(ellipsoid);
-        let authalic_points = points.into_iter().map(|p| sphere.convert(p)).collect();
+        let authalic_points = points.into_iter().map(|p| sphere.to_authalic(p)).collect();
 
         let built;
         let polyhedron = match polyhedron {
@@ -292,7 +288,7 @@ impl Projection for Vgc {
 
         self.geo_to_cartesian(authalic_points, Some(polyhedron), None)
             .into_iter()
-            .map(|ForwardCartesian { coords, face }| {
+            .map(|ForwardCartesian { coords, face, sub_triangle_id }| {
                 let is_upward = face % 2 == 0;
                 let face_template = if is_upward {
                     FACE_TEMPLATE_UP
@@ -331,7 +327,7 @@ impl Projection for Vgc {
     ) -> DistortionMetrics {
         let epsilon = 1e-5_f64; // degrees
         let sphere = AuthalicSphere::from_ellipsoid(ellipsoid);
-        let to_authalic = |lon: f64, lat: f64| sphere.convert(Point::new(lat, lon));
+        let to_authalic = |lon: f64, lat: f64| sphere.to_authalic(Point::new(lat, lon));
 
         let center_xy =
             &self.geo_to_cartesian(vec![to_authalic(lon, lat)], Some(polyhedron), None)[0];
@@ -468,8 +464,7 @@ fn slice_and_dice(ac: f64, ab: f64, bc: f64, ap: f64, bp: f64) -> [f64; 2] {
     // reduces to exactly cos(ab), matching the old limit, but it also tracks the correct
     // higher-order value for small nonzero rho instead of freezing at the zeroth-order term.
     let cos_ab = ab.cos();
-    let cos_xp_y =
-        rho.cos() * cos_ab / (1.0 - rho.sin().powi(2) * cos_ab.powi(2)).max(0.0).sqrt();
+    let cos_xp_y = rho.cos() * cos_ab / (1.0 - rho.sin().powi(2) * cos_ab.powi(2)).max(0.0).sqrt();
 
     // 4. Calculate the ratio of the spherical areas x and y
     let xy = f64::sqrt((1.0 - bp.cos()) / (1.0 - cos_xp_y));
@@ -1080,7 +1075,7 @@ mod tests {
         assert!((inv[0].x() - lisbon.x()).abs() < 1e-6);
         assert!((inv[0].y() - lisbon.y()).abs() < 1e-6);
     }
-  
+
     /// `geo_to_barycentric` should reproduce `geo_to_cartesian`'s face id, and its weights
     /// should reconstruct the same face-plane point when combined with the face template —
     /// i.e. `sum(coords[k] * face_template[k]) * radius == geo_to_cartesian's coords`.
