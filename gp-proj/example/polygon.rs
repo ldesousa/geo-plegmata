@@ -7,7 +7,7 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use geo::Point;
+use geoplegma::types::Point;
 use gp_proj::{
     constants::WGS84,
     ellipsoid::AuthalicSphere,
@@ -22,12 +22,12 @@ pub fn main() -> () {
         "Polygon example for gp-proj. Convert geographic coordinates to barycentric coordinates, and vice-versa."
     );
 
-    let p1 = Point::new(-9.192722996293583, 38.72423364219293);
-    let p2 = Point::new(-10.681508330872333, 37.83692529759742);
-    let p3 = Point::new(-9.027302403562487, 36.23040220266431);
-    let p4 = Point::new(-6.049731734403736, 37.48772339897228);
-    let p5 = Point::new(-7.180105784733257, 39.57941279302861);
-    let p6 = Point::new(-9.192722996293583, 38.72423364219293);
+    let p1 = Point::new(38.72423364219293, -9.192722996293583);
+    let p2 = Point::new(37.83692529759742, -10.681508330872333);
+    let p3 = Point::new(36.23040220266431, -9.027302403562487);
+    let p4 = Point::new(37.48772339897228, -6.049731734403736);
+    let p5 = Point::new(39.57941279302861, -7.180105784733257);
+    let p6 = Point::new(38.72423364219293, -9.192722996293583);
 
     let projection = Vgc::default();
     let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);

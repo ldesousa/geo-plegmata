@@ -6,7 +6,7 @@
 // or http://opensource.org/licenses/MIT>, at your discretion. This file may not 
 // be copied, modified or distributed except according to those terms.
 
-use geo::Point;
+use geoplegma::types::Point;
 
 use crate::constants::KarneyCoefficients;
 use crate::ellipsoid::auxiliary_latitude::{apply_clenshaw_summation, fourier_coefficients};
@@ -51,8 +51,8 @@ impl AuthalicSphere {
     /// Convert a geodetic point (lon/lat in degrees) to authalic lon/lat (radians).
     pub fn to_authalic(&self, point: Point) -> AuthalicCoord {
         AuthalicCoord {
-            lon: point.x().to_radians(),
-            lat: apply_clenshaw_summation(point.y().to_radians(), &self.coefficients),
+            lon: point.lon.to_radians(),
+            lat: apply_clenshaw_summation(point.lat.to_radians(), &self.coefficients),
         }
     }
 

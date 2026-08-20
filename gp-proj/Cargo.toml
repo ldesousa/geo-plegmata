@@ -10,6 +10,7 @@ rust-version = "1.88"
 [dependencies]
 geo = "0.30.0"
 thiserror = "2.0.12"
+geoplegma = { path = "../geoplegma" }
 
 [[example]]
 name = "basic"
@@ -22,4 +23,8 @@ path = "example/polygon.rs"
 [[example]]
 name = "inverse"
 path = "example/inverse.rs"
+
+[[example]]
+name = "barycentric"
+path = "example/barycentric.rs"
 
