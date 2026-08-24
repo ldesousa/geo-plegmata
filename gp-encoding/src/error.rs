@@ -37,4 +37,14 @@ pub enum EncodingError {
 
     #[error("Grid error: {0}")]
     Grid(String),
+
+    #[error("Invalid coordinate length (expected at least 2, got {0})")]
+    InvalidCoordinateLength(usize),
+
+    #[error("Invalid coordinate format (expected floats / arrays of floats)")]
+    InvalidCoordinateFormat,
+
+    #[error("No zone found for point {0:?}")]
+    NoZoneFound(geoplegma::types::Point),
 }
+
