@@ -137,10 +137,15 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("gp_encoding_convert");
-            PathBuf::from(default_name)
+            PathBuf::from(format!("{}_converted", default_name))
         });
 
         if output.exists() {
+            if let (Ok(in_canon), Ok(out_canon)) = (args.input.canonicalize(), output.canonicalize()) {
+                if in_canon == out_canon {
+                    return Err(format!("Output path {} is the same as the input path. This would delete the input dataset. Please specify a different output path.", output.display()));
+                }
+            }
             std::fs::remove_dir_all(&output).map_err(|e| {
                 format!(
                     "failed to clean output store {}: {e}",
@@ -197,6 +202,14 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
                 return Err("Cannot specify --subdataset when converting a vector file.".to_string());
             }
 
+            if output.exists() {
+                if let (Ok(in_canon), Ok(out_canon)) = (args.input.canonicalize(), output.canonicalize()) {
+                    if in_canon == out_canon {
+                        return Err(format!("Output path {} is the same as the input path. This would overwrite the input dataset. Please specify a different output path.", output.display()));
+                    }
+                }
+            }
+
             println!("Detected vector dataset with {} layers", dataset.layer_count());
             let refinement = if let Some(level) = args.level {
                 RefinementLevel::from(level)
@@ -216,6 +229,11 @@ fn run_convert(args: ConvertArgs) -> Result<(), String> {
         } else {
             println!("Detected raster dataset");
             if output.exists() {
+                if let (Ok(in_canon), Ok(out_canon)) = (args.input.canonicalize(), output.canonicalize()) {
+                    if in_canon == out_canon {
+                        return Err(format!("Output path {} is the same as the input path. This would delete the input dataset. Please specify a different output path.", output.display()));
+                    }
+                }
                 std::fs::remove_dir_all(&output).map_err(|e| {
                     format!(
                         "failed to clean output store {}: {e}",
