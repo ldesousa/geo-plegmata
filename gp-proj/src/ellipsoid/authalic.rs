@@ -59,8 +59,8 @@ impl AuthalicSphere {
     /// Convert an authalic lon/lat (radians) back to a geodetic point (lon/lat in degrees).
     pub fn to_geodetic(&self, coord: AuthalicCoord) -> Point {
         Point::new(
-            coord.lon.to_degrees(),
             apply_clenshaw_summation(coord.lat, &self.inverse_coefficients).to_degrees(),
+            coord.lon.to_degrees(),
         )
     }
 

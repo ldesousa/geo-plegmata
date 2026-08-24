@@ -7,7 +7,7 @@
 // discretion. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use geo::Point;
+use geoplegma::types::Point;
 use gp_proj::{
     constants::WGS84, ellipsoid::AuthalicSphere, projections::{
         polyhedron::{Orientation, icosahedron},
@@ -43,10 +43,10 @@ pub fn main() -> () {
 
     let inverse = projection.cartesian_to_geo(forward, Some(&icosahedron));
 
-    println!("original:  lat={}, lon={}", points[0].y(), points[0].x());
+    println!("original:  lat={}, lon={}", points[0].lat, points[0].lon);
     println!(
         "recovered: lat={:.6}, lon={:.6}",
-        inverse[0].y(),
-        inverse[0].x()
+        inverse[0].lat,
+        inverse[0].lon
     );
 }

@@ -75,8 +75,8 @@ pub fn main() -> () {
     println!("original:  lat=38.685, lon=-9.494");
     println!(
         "recovered: lat={:.6}, lon={:.6}",
-        inverse[0].y(),
-        inverse[0].x()
+        inverse[0].lat,
+        inverse[0].lon
     );
 }
 

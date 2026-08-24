@@ -288,7 +288,7 @@ impl Projection for Vgc {
 
         self.geo_to_cartesian(authalic_points, Some(polyhedron), None)
             .into_iter()
-            .map(|ForwardCartesian { coords, face, sub_triangle_id }| {
+            .map(|ForwardCartesian { coords, face, sub_triangle_id: _ }| {
                 let is_upward = face % 2 == 0;
                 let face_template = if is_upward {
                     FACE_TEMPLATE_UP
@@ -1039,23 +1039,23 @@ mod tests {
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
         let points = vec![
-            Point::new(-9.222154, 38.695125),
-            Point::new(-138.97503, 47.7022),
-            Point::new(99.72721, 25.82577),
-            Point::new(-64.10552, 12.89276),
-            Point::new(-128.28185, -50.60992),
-            Point::new(-70.47681, -0.81784),
-            Point::new(152.44705, -21.59114),
-            Point::new(66.665798, -77.717034),
-            Point::new(63.501735, 80.099071),
+            Point::new(38.695125, -9.222154),
+            Point::new(47.7022, -138.97503),
+            Point::new(25.82577, 99.72721),
+            Point::new(12.89276, -64.10552),
+            Point::new(-50.60992, -128.28185),
+            Point::new(-0.81784, -70.47681),
+            Point::new(-21.59114, 152.44705),
+            Point::new(-77.717034, 66.665798),
+            Point::new(80.099071, 63.501735),
         ];
         let authalic_points: Vec<AuthalicCoord> = points.iter().copied().map(to_authalic).collect();
         let fwd = projection.geo_to_cartesian(authalic_points, Some(&icosahedron), None);
         let inv = projection.cartesian_to_geo(fwd, Some(&icosahedron));
         let mut max_err = 0.0_f64;
         for (orig, back) in points.iter().zip(inv.iter()) {
-            let dlon = (orig.x() - back.x()).abs();
-            let dlat = (orig.y() - back.y()).abs();
+            let dlon = (orig.lon - back.lon).abs();
+            let dlat = (orig.lat - back.lat).abs();
             let err = dlon.max(dlat);
             println!("orig={:?} back={:?} err={:.3e}", orig, back, err);
             max_err = max_err.max(err);
@@ -1068,12 +1068,12 @@ mod tests {
     fn test_roundtrip_debug() {
         let projection = Vgc::default();
         let icosahedron = icosahedron::new(Orientation::DGGS_OPTIMAL);
-        let lisbon = Point::new(-9.49420, 38.68499);
+        let lisbon = Point::new(38.68499, -9.49420);
         let fwd = projection.geo_to_cartesian(vec![to_authalic(lisbon)], Some(&icosahedron), None);
         let inv = projection.cartesian_to_geo(fwd, Some(&icosahedron));
         println!("INVERSE: {:?}  (original {:?})", inv[0], lisbon);
-        assert!((inv[0].x() - lisbon.x()).abs() < 1e-6);
-        assert!((inv[0].y() - lisbon.y()).abs() < 1e-6);
+        assert!((inv[0].lon - lisbon.lon).abs() < 1e-6);
+        assert!((inv[0].lat - lisbon.lat).abs() < 1e-6);
     }
 
     /// `geo_to_barycentric` should reproduce `geo_to_cartesian`'s face id, and its weights
