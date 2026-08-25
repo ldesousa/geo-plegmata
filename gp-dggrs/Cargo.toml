@@ -7,7 +7,6 @@ readme = "README.md"
 rust-version = "1.88"
 
 [dependencies]
-gp-dggrs = {path = "../gp-dggrs/"}
-
-
-
+geo = "0.30.0"
+geoplegma = { path = "../geoplegma" }
+gp-proj = { path = "../gp-proj" }

@@ -130,3 +130,43 @@ pub fn triangle(
         Some(([mid, v1, c], (i1 * 2 + 1) as u8))
     }
 }
+
+/// Convert 2D Cartesian coordinates to Barycentric coordinates
+/// relative to a triangle defined by vertices a, b, c.
+///
+/// Returns (u, v, w) where u + v + w = 1.0
+/// Point is inside the triangle if all three are in [0, 1].
+pub fn cartesian_to_barycentric(
+    p: (f64, f64),
+    a: (f64, f64),
+    b: (f64, f64),
+    c: (f64, f64),
+) -> (f64, f64, f64) {
+    let (px, py) = p;
+    let (ax, ay) = a;
+    let (bx, by) = b;
+    let (cx, cy) = c;
+
+    // Compute vectors
+    let v0x = cx - ax;
+    let v0y = cy - ay;
+    let v1x = bx - ax;
+    let v1y = by - ay;
+    let v2x = px - ax;
+    let v2y = py - ay;
+
+    // Compute dot products
+    let dot00 = v0x * v0x + v0y * v0y;
+    let dot01 = v0x * v1x + v0y * v1y;
+    let dot02 = v0x * v2x + v0y * v2y;
+    let dot11 = v1x * v1x + v1y * v1y;
+    let dot12 = v1x * v2x + v1y * v2y;
+
+    // Compute barycentric coordinates
+    let inv_denom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+    let v = (dot11 * dot02 - dot01 * dot12) * inv_denom;
+    let w = (dot00 * dot12 - dot01 * dot02) * inv_denom;
+    let u = 1.0 - v - w;
+
+    (u, v, w)
+}
