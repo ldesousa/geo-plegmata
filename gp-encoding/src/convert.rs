@@ -74,7 +74,10 @@ fn attribute_schema_from_band(band: &RasterBand<'_>) -> Result<AttributeSchema, 
 
     Ok(AttributeSchema {
         dtype,
-        fill_value: band.no_data_value().map(|value| value.to_string()),
+        fill_value: band
+            .no_data_value()
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| dtype.default_fill_value()),
     })
 }
 
@@ -570,10 +573,7 @@ where
         .attributes
         .iter()
         .map(|attr| {
-            let fill_val = match &attr.fill_value {
-                Some(value) => parse_fill_value_to_f64(&attr.dtype, value)?,
-                None => 0.0,
-            };
+            let fill_val = parse_fill_value_to_f64(&attr.dtype, &attr.fill_value)?;
             encode_value_from_f64(&attr.dtype, fill_val)
         })
         .collect::<Result<_, EncodingError>>()?;
@@ -978,10 +978,7 @@ where
             .attributes
             .iter()
             .map(|attr| {
-                let fill_val = match &attr.fill_value {
-                    Some(value) => parse_fill_value_to_f64(&attr.dtype, value)?,
-                    None => 0.0,
-                };
+                let fill_val = parse_fill_value_to_f64(&attr.dtype, &attr.fill_value)?;
                 encode_value_from_f64(&attr.dtype, fill_val)
             })
             .collect::<Result<_, EncodingError>>()?;
@@ -1133,6 +1130,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gdal::DriverManager;
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::path::PathBuf;
     use crate::zarr::ZarrBackend;
@@ -1144,6 +1142,33 @@ mod tests {
             .expect("system time")
             .as_nanos();
         std::env::temp_dir().join(format!("gp_encoding_{name}_{nanos}"))
+    }
+
+    #[test]
+    fn test_attribute_schema_uses_declared_no_data() {
+        let driver = DriverManager::get_driver_by_name("MEM").expect("MEM driver");
+        let dataset = driver
+            .create_with_band_type::<f32, _>("", 1, 1, 1)
+            .expect("create in-memory raster");
+        let mut band = dataset.rasterband(1).expect("raster band");
+        band.set_no_data_value(Some(-9999.0)).expect("set no-data");
+
+        let schema = attribute_schema_from_band(&band).expect("attribute schema");
+
+        assert_eq!(schema.fill_value, "-9999");
+    }
+
+    #[test]
+    fn test_attribute_schema_uses_default_when_no_data_is_missing() {
+        let driver = DriverManager::get_driver_by_name("MEM").expect("MEM driver");
+        let dataset = driver
+            .create_with_band_type::<f32, _>("", 1, 1, 1)
+            .expect("create in-memory raster");
+        let band = dataset.rasterband(1).expect("raster band");
+
+        let schema = attribute_schema_from_band(&band).expect("attribute schema");
+
+        assert_eq!(schema.fill_value, "NaN");
     }
 
     #[test]
@@ -1177,7 +1202,7 @@ mod tests {
             dggrs: dggrs_src,
             attributes: vec![AttributeSchema {
                 dtype: DataType::Float32,
-                fill_value: Some("0.0".to_string()),
+                fill_value: "0.0".to_string(),
             }],
             chunk_size: src_chunk_size,
             levels: vec![src_refinement_level.get() as u32],
@@ -1246,4 +1271,3 @@ mod tests {
         assert_eq!(get_subdataset_short_name("HDF5:file.h5:variable_with_spaces "), "variable_with_spaces");
     }
 }
-

@@ -43,8 +43,8 @@ pub struct AttributeSchema {
     /// Data type of the attribute values.
     pub dtype: DataType,
 
-    /// Optional fill / no-data value.
-    pub fill_value: Option<String>,
+    /// Fill / no-data value.
+    pub fill_value: String,
 }
 
 /// Supported data types for cell attribute values.
@@ -69,6 +69,20 @@ impl DataType {
             DataType::Int16 | DataType::UInt16 => 2,
             DataType::Float32 | DataType::Int32 | DataType::UInt32 => 4,
             DataType::Float64 | DataType::Int64 | DataType::UInt64 => 8,
+        }
+    }
+
+    pub fn default_fill_value(&self) -> String {
+        match self {
+            DataType::Float32 | DataType::Float64 => "NaN".to_string(),
+            DataType::Int8 => i8::MIN.to_string(),
+            DataType::Int16 => i16::MIN.to_string(),
+            DataType::Int32 => i32::MIN.to_string(),
+            DataType::Int64 => i64::MIN.to_string(),
+            DataType::UInt8 => u8::MAX.to_string(),
+            DataType::UInt16 => u16::MAX.to_string(),
+            DataType::UInt32 => u32::MAX.to_string(),
+            DataType::UInt64 => u64::MAX.to_string(),
         }
     }
 }
