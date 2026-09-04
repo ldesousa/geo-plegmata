@@ -20,9 +20,11 @@ use serde_json::Value;
 use crate::common::{CENTER_CONFIG, ID_ONLY_CONFIG};
 use crate::error::EncodingError;
 use crate::storage::StorageBackend;
-use crate::value::{
-    decode_value_to_f64, decode_value_to_json, parse_fill_value_to_f64, parse_fill_value_to_json,
-};
+use crate::value::{decode_value_to_f64, decode_value_to_json, parse_fill_value_to_f64};
+
+fn is_fill_value(value: f64, fill_value: f64) -> bool {
+    value == fill_value || (value.is_nan() && fill_value.is_nan())
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct VisualizationCell {
@@ -262,17 +264,11 @@ where
     let grid = get(backend.metadata().dggrs)
         .map_err(|e| EncodingError::Grid(format!("failed to resolve DGGS: {e}")))?;
 
-    let fill_values: Vec<Option<Value>> = backend
+    let fill_values: Vec<f64> = backend
         .metadata()
         .attributes
         .iter()
-        .map(|attr| {
-            if let Some(fill_value) = &attr.fill_value {
-                Ok(Some(parse_fill_value_to_json(&attr.dtype, fill_value)?))
-            } else {
-                Ok(None)
-            }
-        })
+        .map(|attr| parse_fill_value_to_f64(&attr.dtype, &attr.fill_value))
         .collect::<Result<_, EncodingError>>()?;
 
     let mut row_count = 0_usize;
@@ -318,13 +314,12 @@ where
                     )));
                 }
 
-                let value = decode_value_to_json(dtype, &chunk[start..end])?;
-                if fill_values[band as usize]
-                    .as_ref()
-                    .is_some_and(|fill_value| *fill_value == value)
-                {
+                let value_bytes = &chunk[start..end];
+                let numeric_value = decode_value_to_f64(dtype, value_bytes)?;
+                if is_fill_value(numeric_value, fill_values[band as usize]) {
                     continue;
                 }
+                let value = decode_value_to_json(dtype, value_bytes)?;
                 bands.insert(format!("band_{band}"), value);
                 has_non_fill = true;
             }
@@ -385,17 +380,11 @@ where
     let grid = get(backend.metadata().dggrs)
         .map_err(|e| EncodingError::Grid(format!("failed to resolve DGGS: {e}")))?;
 
-    let fill_values: Vec<Option<f64>> = backend
+    let fill_values: Vec<f64> = backend
         .metadata()
         .attributes
         .iter()
-        .map(|attr| {
-            if let Some(fill_value) = &attr.fill_value {
-                Ok(Some(parse_fill_value_to_f64(&attr.dtype, fill_value)?))
-            } else {
-                Ok(None)
-            }
-        })
+        .map(|attr| parse_fill_value_to_f64(&attr.dtype, &attr.fill_value))
         .collect::<Result<_, EncodingError>>()?;
 
     let mut row_count = 0_usize;
@@ -472,10 +461,7 @@ where
                 }
 
                 let value = decode_value_to_f64(dtype, &chunk[start..end])?;
-                if fill_values[band as usize]
-                    .as_ref()
-                    .is_some_and(|fill_value| *fill_value == value)
-                {
+                if is_fill_value(value, fill_values[band as usize]) {
                     continue;
                 }
 
@@ -510,7 +496,7 @@ mod tests {
 
     use crate::common::ID_ONLY_CONFIG;
     use crate::models::{AttributeSchema, DataType, DatasetMetadata};
-    use crate::query::query_value_by_cell_index;
+    use crate::query::{is_fill_value, query_value_by_cell_index};
     use crate::storage::StorageBackend;
     use crate::zarr::ZarrBackend;
 
@@ -520,6 +506,12 @@ mod tests {
             .expect("system time")
             .as_nanos();
         std::env::temp_dir().join(format!("gp_encoding_{name}_{nanos}"))
+    }
+
+    #[test]
+    fn nan_values_match_nan_fill() {
+        assert!(is_fill_value(f64::NAN, f64::NAN));
+        assert!(!is_fill_value(1.0, f64::NAN));
     }
 
     #[test]
@@ -567,7 +559,7 @@ mod tests {
             dggrs,
             attributes: vec![AttributeSchema {
                 dtype: DataType::UInt16,
-                fill_value: None,
+                fill_value: u16::MAX.to_string(),
             }],
             chunk_size,
             levels: vec![refinement_level.get() as u32],
@@ -585,6 +577,15 @@ mod tests {
         backend
             .create_level(refinement_level.get() as u32, 0, 2 * chunk_size, chunk_size)
             .expect("create level");
+
+        let array_metadata: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                store_path.join(format!("level_{}/band_0/zarr.json", refinement_level.get())),
+            )
+            .expect("read array metadata"),
+        )
+        .expect("parse array metadata");
+        assert_eq!(array_metadata["fill_value"], serde_json::json!(u16::MAX));
 
         let mut chunk0_values = vec![0_u16; chunk_size as usize];
         chunk0_values[0] = 10;

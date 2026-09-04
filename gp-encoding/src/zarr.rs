@@ -18,7 +18,7 @@ use geoplegma::types::{RefinementLevel, RelativeDepth, ZoneId};
 use indicatif::{ProgressBar, ProgressStyle};
 use zarrs::array::codec::api::BytesToBytesCodecTraits;
 use zarrs::array::codec::{GzipCodec, ZstdCodec};
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes};
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, FillValue};
 use zarrs::group::{Group, GroupBuilder};
 use zarrs_filesystem::FilesystemStore;
 
@@ -85,14 +85,6 @@ impl ZarrBackend {
             DataType::UInt32 => "uint32",
             DataType::UInt64 => "uint64",
         }
-    }
-
-    fn primary_dtype_str(&self) -> &'static str {
-        self.metadata
-            .attributes
-            .first()
-            .map(|a| Self::to_zarr_dtype_str(&a.dtype))
-            .unwrap_or("uint64")
     }
 
     fn level_path(level: u32, band: u32) -> String {
@@ -310,16 +302,11 @@ impl ZarrBackend {
         let source_relative_depth =
             RelativeDepth::new(source_level_i32 - source_chunk_level.get())?;
         let level_steps = source_level_i32 - target_level_i32;
-        let fill_values: Vec<Option<f64>> = self
+        let fill_values: Vec<f64> = self
             .metadata
             .attributes
             .iter()
-            .map(|attr| {
-                attr.fill_value
-                    .as_ref()
-                    .map(|value| parse_fill_value_to_f64(&attr.dtype, value))
-                    .transpose()
-            })
+            .map(|attr| parse_fill_value_to_f64(&attr.dtype, &attr.fill_value))
             .collect::<Result<_, EncodingError>>()?;
 
         self.set_level_chunk_ids(target_level, target_chunk_level.get() as u32, target_chunk_ids.clone())?;
@@ -337,10 +324,7 @@ impl ZarrBackend {
             .attributes
             .iter()
             .map(|attr| {
-                let fill_value = match &attr.fill_value {
-                    Some(value) => parse_fill_value_to_f64(&attr.dtype, value)?,
-                    None => 0.0,
-                };
+                let fill_value = parse_fill_value_to_f64(&attr.dtype, &attr.fill_value)?;
                 encode_value_from_f64(&attr.dtype, fill_value)
             })
             .collect::<Result<_, EncodingError>>()?;
@@ -423,7 +407,9 @@ impl ZarrBackend {
                                     }
 
                                     let value = decode_value_to_f64(dtype, &chunk[start..end])?;
-                                    if fill_values[band].is_some_and(|fill_value| fill_value == value) {
+                                    if value == fill_values[band]
+                                        || (value.is_nan() && fill_values[band].is_nan())
+                                    {
                                         continue;
                                     }
 
@@ -562,13 +548,18 @@ impl StorageBackend for ZarrBackend {
         chunk_size: u64,
     ) -> Result<ZarrLevel, EncodingError> {
         let path = Self::level_path(level, band);
-        let dtype_str = self.primary_dtype_str();
+        let attribute = self.metadata.attributes.get(band as usize).ok_or_else(|| {
+            EncodingError::Storage(format!("band {band} is not present in dataset metadata"))
+        })?;
+        let dtype_str = Self::to_zarr_dtype_str(&attribute.dtype);
+        let fill_value = parse_fill_value_to_f64(&attribute.dtype, &attribute.fill_value)?;
+        let fill_bytes = encode_value_from_f64(&attribute.dtype, fill_value)?;
 
         let mut array_builder = ArrayBuilder::new(
             vec![num_cells],
             vec![chunk_size],
             dtype_str,
-            0u64,
+            FillValue::new(fill_bytes),
         );
 
         if let Some(codecs) = Self::codecs_for_compression(self.metadata.compression.as_ref())? {

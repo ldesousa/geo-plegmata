@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::str::FromStr;
 
-use gdal::raster::GdalDataType;
+use gdal::raster::{GdalDataType, RasterBand};
 use gdal::spatial_ref::{CoordTransform, SpatialRef};
 use gdal::{Dataset, GeoTransformEx, Metadata};
 use geoplegma::api::DggrsApiConfig;
@@ -51,6 +51,35 @@ macro_rules! impl_native_bytes {
 impl_native_bytes!(u8, i8, u16, i16, u32, i32, u64, i64, f32, f64);
 
 const ZARR_TARGET_UNCOMPRESSED_CHUNK_BYTES: u64 = 1024 * 1024;
+
+fn attribute_schema_from_band(band: &RasterBand<'_>) -> Result<AttributeSchema, EncodingError> {
+    let band_type = band.band_type();
+    let dtype = match band_type {
+        GdalDataType::UInt8 => DataType::UInt8,
+        GdalDataType::Int8 => DataType::Int8,
+        GdalDataType::Int16 => DataType::Int16,
+        GdalDataType::UInt16 => DataType::UInt16,
+        GdalDataType::Int32 => DataType::Int32,
+        GdalDataType::UInt32 => DataType::UInt32,
+        GdalDataType::Int64 => DataType::Int64,
+        GdalDataType::UInt64 => DataType::UInt64,
+        GdalDataType::Float32 => DataType::Float32,
+        GdalDataType::Float64 => DataType::Float64,
+        _ => {
+            return Err(EncodingError::Dataset(format!(
+                "unsupported GDAL data type: {band_type:?}"
+            )));
+        }
+    };
+
+    Ok(AttributeSchema {
+        dtype,
+        fill_value: band
+            .no_data_value()
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| dtype.default_fill_value()),
+    })
+}
 
 fn get_corners_and_pixel_size(
     dataset: &Dataset,
@@ -428,32 +457,9 @@ where
         .rasterbands()
         .map(|b| b.map(|band| band.band_type()))
         .collect::<Result<Vec<_>, _>>()?;
-    let metadata_bands = bands
-        .iter()
-        .map(|band_type| {
-            let dtype = match band_type {
-                GdalDataType::UInt8 => DataType::UInt8,
-                GdalDataType::Int8 => DataType::Int8,
-                GdalDataType::Int16 => DataType::Int16,
-                GdalDataType::UInt16 => DataType::UInt16,
-                GdalDataType::Int32 => DataType::Int32,
-                GdalDataType::UInt32 => DataType::UInt32,
-                GdalDataType::Int64 => DataType::Int64,
-                GdalDataType::UInt64 => DataType::UInt64,
-                GdalDataType::Float32 => DataType::Float32,
-                GdalDataType::Float64 => DataType::Float64,
-                _ => {
-                    return Err(EncodingError::Dataset(format!(
-                        "unsupported GDAL data type: {band_type:?}"
-                    )));
-                }
-            };
-
-            Ok(AttributeSchema {
-                dtype,
-                fill_value: Some("0.0".to_string()),
-            })
-        })
+    let metadata_bands = dataset
+        .rasterbands()
+        .map(|band| attribute_schema_from_band(&band?))
         .collect::<Result<Vec<_>, EncodingError>>()?;
 
     if metadata_bands.is_empty() {
@@ -567,10 +573,7 @@ where
         .attributes
         .iter()
         .map(|attr| {
-            let fill_val = match &attr.fill_value {
-                Some(value) => parse_fill_value_to_f64(&attr.dtype, value)?,
-                None => 0.0,
-            };
+            let fill_val = parse_fill_value_to_f64(&attr.dtype, &attr.fill_value)?;
             encode_value_from_f64(&attr.dtype, fill_val)
         })
         .collect::<Result<_, EncodingError>>()?;
@@ -975,10 +978,7 @@ where
             .attributes
             .iter()
             .map(|attr| {
-                let fill_val = match &attr.fill_value {
-                    Some(value) => parse_fill_value_to_f64(&attr.dtype, value)?,
-                    None => 0.0,
-                };
+                let fill_val = parse_fill_value_to_f64(&attr.dtype, &attr.fill_value)?;
                 encode_value_from_f64(&attr.dtype, fill_val)
             })
             .collect::<Result<_, EncodingError>>()?;
@@ -1130,6 +1130,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gdal::DriverManager;
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::path::PathBuf;
     use crate::zarr::ZarrBackend;
@@ -1141,6 +1142,33 @@ mod tests {
             .expect("system time")
             .as_nanos();
         std::env::temp_dir().join(format!("gp_encoding_{name}_{nanos}"))
+    }
+
+    #[test]
+    fn test_attribute_schema_uses_declared_no_data() {
+        let driver = DriverManager::get_driver_by_name("MEM").expect("MEM driver");
+        let dataset = driver
+            .create_with_band_type::<f32, _>("", 1, 1, 1)
+            .expect("create in-memory raster");
+        let mut band = dataset.rasterband(1).expect("raster band");
+        band.set_no_data_value(Some(-9999.0)).expect("set no-data");
+
+        let schema = attribute_schema_from_band(&band).expect("attribute schema");
+
+        assert_eq!(schema.fill_value, "-9999");
+    }
+
+    #[test]
+    fn test_attribute_schema_uses_default_when_no_data_is_missing() {
+        let driver = DriverManager::get_driver_by_name("MEM").expect("MEM driver");
+        let dataset = driver
+            .create_with_band_type::<f32, _>("", 1, 1, 1)
+            .expect("create in-memory raster");
+        let band = dataset.rasterband(1).expect("raster band");
+
+        let schema = attribute_schema_from_band(&band).expect("attribute schema");
+
+        assert_eq!(schema.fill_value, "NaN");
     }
 
     #[test]
@@ -1174,7 +1202,7 @@ mod tests {
             dggrs: dggrs_src,
             attributes: vec![AttributeSchema {
                 dtype: DataType::Float32,
-                fill_value: Some("0.0".to_string()),
+                fill_value: "0.0".to_string(),
             }],
             chunk_size: src_chunk_size,
             levels: vec![src_refinement_level.get() as u32],
@@ -1243,5 +1271,3 @@ mod tests {
         assert_eq!(get_subdataset_short_name("HDF5:file.h5:variable_with_spaces "), "variable_with_spaces");
     }
 }
-
-
