@@ -33,6 +33,7 @@ pub struct ForwardBary {
 pub struct ForwardCartesian {
     pub coords: Coord,
     pub face: usize,
+    pub sub_triangle_id: u8,
 }
 
 #[derive(Debug)]
@@ -51,10 +52,13 @@ pub trait Projection {
         layout: Option<&dyn Layout>,
     ) -> Vec<ForwardCartesian>;
 
-    fn cartesian_to_geo(&self, coords: Vec<Coord>) -> Point;
-
-    fn compute_distortion(
+    fn cartesian_to_geo(
         &self,
+        coords: Vec<ForwardCartesian>,
+        polyhedron: Option<&Polyhedron>,
+    ) -> Vec<Point>;
+
+    fn compute_distortion(&self,
         lat: f64,
         lon: f64,
         polyhedron: &Polyhedron,

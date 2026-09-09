@@ -21,6 +21,10 @@ name = "polygon"
 path = "example/polygon.rs"
 
 [[example]]
+name = "inverse"
+path = "example/inverse.rs"
+
+[[example]]
 name = "barycentric"
 path = "example/barycentric.rs"
 
